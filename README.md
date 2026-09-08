@@ -16,8 +16,6 @@ O tema escolhido foi Growth Marketing, Inteligência Artificial e Automação, b
 
 ## Fontes utilizadas
 
-## Fontes utilizadas
-
 Para construir este caderno temático, foram selecionadas quatro fontes abertas sobre Growth Marketing, Inteligência Artificial, dados e automação.
 
 ### 1. Tropical Hub — Como construir máquinas de Growth Marketing orientadas por IA e dados
