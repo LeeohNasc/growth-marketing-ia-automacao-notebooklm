@@ -16,7 +16,37 @@ O tema escolhido foi Growth Marketing, Inteligência Artificial e Automação, b
 
 ## Fontes utilizadas
 
-> Esta seção será preenchida após a seleção das fontes para o NotebookLM.
+## Fontes utilizadas
+
+Para construir este caderno temático, foram selecionadas quatro fontes abertas sobre Growth Marketing, Inteligência Artificial, dados e automação.
+
+### 1. Tropical Hub — Como construir máquinas de Growth Marketing orientadas por IA e dados
+
+- **Fonte:** Tropical Hub
+- **Link:** https://www.tropicalhub.co/blog/growth-marketing-maquinas-orientadas-por-ia-e-dados
+- **Tema principal:** Growth Marketing, Inteligência Artificial, dados, CRM e automação.
+- **Motivo da escolha:** A fonte conecta diretamente os principais temas deste projeto e apresenta como IA, dados, processos e automação podem trabalhar de forma integrada para gerar crescimento.
+
+### 2. Alura — O que é Growth Marketing? O guia para o crescimento acelerado
+
+- **Fonte:** Alura
+- **Link:** https://www.alura.com.br/artigos/growth-marketing
+- **Tema principal:** Fundamentos, estratégias e conceitos de Growth Marketing.
+- **Motivo da escolha:** Foi escolhida para fornecer uma base conceitual sobre Growth Marketing, experimentação, análise de dados, jornada do cliente e crescimento sustentável.
+
+### 3. RD Station — Growth Marketing: o que é e os benefícios para a sua empresa
+
+- **Fonte:** RD Station
+- **Link:** https://www.rdstation.com/blog/marketing/growth-marketing/
+- **Tema principal:** Growth Marketing aplicado às empresas.
+- **Motivo da escolha:** A fonte ajuda a compreender como Growth Marketing pode ser utilizado na prática para aquisição, relacionamento, retenção de clientes e melhoria de resultados.
+
+### 4. Mundo do Marketing — Growth Marketing: como aplicar e os principais exemplos
+
+- **Fonte:** Mundo do Marketing
+- **Link:** https://mundodomarketing.com.br/growth-marketing-como-aplicar-e-os-principais-exemplos
+- **Tema principal:** Aplicações práticas, métricas, experimentação e exemplos de Growth Marketing.
+- **Motivo da escolha:** Foi selecionada por apresentar exemplos práticos, métricas, experimentação e aplicações de Inteligência Artificial e automação em estratégias de crescimento.
 
 ## Engenharia de Prompts
 
