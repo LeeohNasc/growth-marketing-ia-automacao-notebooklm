@@ -180,7 +180,20 @@ Antes de automatizar, é necessário:
 
 ## Glossário
 
-> Principais conceitos aprendidos durante o projeto.
+- **Growth Marketing:** estratégia de crescimento baseada em dados, experimentação contínua e otimização de toda a jornada do cliente.
+- **AARRR:** framework composto por Aquisição, Ativação, Retenção, Receita e Recomendação.
+- **CAC:** Custo de Aquisição de Cliente.
+- **LTV:** valor total gerado por um cliente durante seu relacionamento com a empresa.
+- **Churn:** taxa de cancelamento ou perda de clientes.
+- **ROI:** retorno obtido em relação ao investimento realizado.
+- **CRM:** sistema utilizado para centralizar e gerenciar dados e interações com clientes.
+- **Lead Scoring:** processo de pontuação de leads com base em critérios de interesse e potencial de compra.
+- **MQL:** lead qualificado pelo marketing.
+- **SQL:** lead considerado pronto para abordagem comercial.
+- **Teste A/B:** comparação entre duas versões para identificar qual gera melhor resultado.
+- **Automação:** execução automática de tarefas e processos com base em regras previamente definidas.
+- **Inteligência Artificial:** tecnologia capaz de analisar dados, identificar padrões e apoiar decisões e previsões.
+- **NPS:** métrica utilizada para medir satisfação e probabilidade de recomendação.
 
 ## Prompts reutilizáveis
 
