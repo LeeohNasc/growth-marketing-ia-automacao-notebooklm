@@ -98,9 +98,85 @@ As respostas iniciais explicavam os conceitos separadamente, mas não mostravam 
 **Solução:** criei um prompt comparativo com critérios específicos como processo, velocidade, uso de dados, personalização, experimentação e tomada de decisão.
 
 **Aprendizado:** prompts comparativos ajudam a identificar diferenças, vantagens e limitações de forma mais objetiva.
+
 ## Miniguia de Estudo
 
-> Esta seção reunirá o conteúdo consolidado após os estudos.
+### O que é Growth Marketing
+
+Growth Marketing é uma estratégia orientada ao crescimento contínuo, escalável e sustentável. Diferente de abordagens focadas apenas em aquisição ou campanhas isoladas, o Growth trabalha toda a jornada do cliente e utiliza dados, experimentação e melhoria contínua para tomar decisões.
+
+### Funil AARRR
+
+O Growth Marketing pode ser analisado por meio do framework AARRR:
+
+- **Aquisição:** como os usuários chegam até a empresa;
+- **Ativação:** quando percebem valor no produto ou serviço;
+- **Retenção:** capacidade de manter clientes ativos;
+- **Receita:** geração de receita a partir dos clientes;
+- **Recomendação:** indicação de novos usuários por clientes atuais.
+
+### Papel dos Dados
+
+Os dados ajudam a identificar gargalos, medir resultados e reduzir decisões baseadas apenas em opinião ou intuição.
+
+Algumas métricas importantes são:
+
+- CAC;
+- LTV;
+- Churn;
+- ROI;
+- taxa de conversão;
+- NPS.
+
+### Inteligência Artificial no Growth Marketing
+
+A Inteligência Artificial pode ajudar na análise de grandes volumes de dados, identificação de padrões, personalização, previsão de comportamento dos clientes e apoio aos processos de experimentação.
+
+### Automação no Growth Marketing
+
+A automação permite executar tarefas repetitivas e processos de marketing de forma padronizada e escalável.
+
+Exemplos:
+
+- nutrição de leads;
+- atualização de CRM;
+- qualificação de leads;
+- envio automatizado de mensagens;
+- acompanhamento do funil.
+
+### IA + Automação + Growth
+
+As três áreas podem funcionar de forma integrada:
+
+1. dados registram o comportamento dos usuários;
+2. a IA ajuda a interpretar os dados e identificar oportunidades;
+3. a automação executa ações de forma rápida e consistente;
+4. o Growth mede o resultado;
+5. novos experimentos são realizados com base nos aprendizados.
+
+### Aplicações práticas
+
+Algumas aplicações identificadas durante o estudo:
+
+- personalização de campanhas;
+- lead scoring;
+- testes A/B;
+- prevenção de churn;
+- automação de relacionamento;
+- análise de comportamento do cliente.
+
+### Principais cuidados
+
+IA e automação não resolvem processos mal estruturados.
+
+Antes de automatizar, é necessário:
+
+- organizar os dados;
+- definir processos;
+- estabelecer métricas;
+- garantir qualidade das informações;
+- acompanhar os resultados;
+- revisar continuamente as decisões automatizadas.
 
 ## Glossário
 
