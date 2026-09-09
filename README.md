@@ -48,7 +48,32 @@ Para construir este caderno temático, foram selecionadas quatro fontes abertas 
 
 ## Engenharia de Prompts
 
-> Esta seção será preenchida com os prompts testados no NotebookLM.
+Durante o projeto, foram realizados testes com diferentes níveis de detalhamento para avaliar como a estrutura do prompt influencia a resposta do NotebookLM.
+
+### Prompt 1 — Inicial
+
+> Com base nas quatro fontes selecionadas, explique o que é Growth Marketing e como Inteligência Artificial e automação podem ser utilizadas nessa estratégia.
+
+**Resultado:**  
+A resposta apresentou uma visão geral dos conceitos de Growth Marketing, IA e automação, mas ainda de forma ampla.
+
+### Prompt 2 — Refinado
+
+> Com base exclusivamente nas quatro fontes selecionadas, explique como Growth Marketing, Inteligência Artificial e automação podem trabalhar juntas na prática. Para cada aplicação, informe: problema resolvido, como funciona, métrica principal acompanhada e benefício esperado. Não inclua informações que não estejam sustentadas pelas fontes.
+
+**Resultado:**  
+A resposta ficou mais estruturada e prática, relacionando cada aplicação a problemas, funcionamento, métricas e benefícios.
+
+### Prompt 3 — Comparativo
+
+> Compare Growth Marketing tradicional com Growth Marketing apoiado por Inteligência Artificial e automação. Com base exclusivamente nas quatro fontes selecionadas, mostre as principais diferenças em processo, velocidade, uso de dados, personalização, experimentação e tomada de decisão. Ao final, apresente uma tabela comparativa resumida.
+
+**Resultado:**  
+O prompt permitiu visualizar de forma clara as diferenças entre uma operação mais manual e uma operação apoiada por dados, IA e automação.
+
+### Aprendizado
+
+Os testes mostraram que prompts mais específicos, com estrutura, limites e formato de resposta definidos, tendem a gerar respostas mais organizadas, úteis e fáceis de analisar.
 
 ## Cicatrizes e Troubleshooting
 
