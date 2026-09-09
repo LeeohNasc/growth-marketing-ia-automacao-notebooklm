@@ -77,8 +77,27 @@ Os testes mostraram que prompts mais específicos, com estrutura, limites e form
 
 ## Cicatrizes e Troubleshooting
 
-> Aqui serão registrados os problemas encontrados, respostas genéricas, ajustes de prompts e aprendizados durante os testes.
+Durante os testes, percebi que prompts mais amplos geravam respostas corretas, porém extensas e pouco direcionadas para aplicação prática.
 
+### Problema 1 — Resposta ampla demais
+
+No primeiro prompt, o NotebookLM explicou os conceitos de Growth Marketing, IA e automação, mas sem uma estrutura prática clara.
+
+**Solução:** refinei o prompt solicitando que cada aplicação apresentasse:
+- problema resolvido;
+- como funciona;
+- métrica principal;
+- benefício esperado.
+
+**Aprendizado:** quanto mais claro o formato solicitado, mais útil e fácil de analisar fica a resposta.
+
+### Problema 2 — Comparação pouco explícita
+
+As respostas iniciais explicavam os conceitos separadamente, mas não mostravam claramente a diferença entre uma operação tradicional e uma operação apoiada por IA e automação.
+
+**Solução:** criei um prompt comparativo com critérios específicos como processo, velocidade, uso de dados, personalização, experimentação e tomada de decisão.
+
+**Aprendizado:** prompts comparativos ajudam a identificar diferenças, vantagens e limitações de forma mais objetiva.
 ## Miniguia de Estudo
 
 > Esta seção reunirá o conteúdo consolidado após os estudos.
