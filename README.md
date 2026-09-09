@@ -197,8 +197,20 @@ Antes de automatizar, é necessário:
 
 ## Prompts reutilizáveis
 
-> Prompts que poderão ser utilizados em futuras revisões e estudos.
+### 1. Explicação de conceito
+> Com base exclusivamente nas fontes selecionadas, explique [CONCEITO] de forma simples, objetiva e com um exemplo prático.
 
+### 2. Comparação
+> Compare [CONCEITO A] e [CONCEITO B]. Mostre diferenças, vantagens, limitações e quando cada um deve ser utilizado.
+
+### 3. Aplicação prática
+> Com base nas fontes selecionadas, mostre como [CONCEITO] pode ser aplicado na prática. Informe problema resolvido, como funciona, métrica principal e benefício esperado.
+
+### 4. Diagnóstico de Growth
+> Analise o seguinte problema de Growth: [PROBLEMA]. Identifique possíveis gargalos, dados necessários, hipótese, experimento e métrica principal.
+
+### 5. Revisão de estudos
+> Crie um resumo estruturado sobre [TEMA], destacando conceitos principais, exemplos, métricas e cuidados importantes para revisão.
 ## Conclusão
 
 > Reflexão final sobre os principais aprendizados do projeto.
