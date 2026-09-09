@@ -211,6 +211,19 @@ Antes de automatizar, é necessário:
 
 ### 5. Revisão de estudos
 > Crie um resumo estruturado sobre [TEMA], destacando conceitos principais, exemplos, métricas e cuidados importantes para revisão.
+
 ## Conclusão
 
-> Reflexão final sobre os principais aprendizados do projeto.
+Este projeto permitiu consolidar conhecimentos sobre Growth Marketing, Inteligência Artificial e automação a partir de uma abordagem prática de aprendizagem com o NotebookLM.
+
+Ao longo do processo, foi possível perceber que a qualidade da resposta da IA depende não apenas das fontes utilizadas, mas também da forma como os prompts são estruturados.
+
+Os principais aprendizados foram:
+
+- Growth Marketing depende de dados, experimentação contínua e otimização de toda a jornada do cliente;
+- Inteligência Artificial pode apoiar análise, previsão, personalização e tomada de decisão;
+- Automação ajuda a reduzir tarefas repetitivas e dar escala aos processos;
+- Prompts mais específicos geram respostas mais organizadas e úteis;
+- A curadoria das fontes é essencial para reduzir respostas genéricas ou pouco fundamentadas.
+
+O projeto também mostrou que IA e automação não devem ser utilizadas de forma isolada, mas integradas a processos claros, métricas e objetivos de negócio.
