@@ -63,6 +63,8 @@ beforeAll(async () => {
   user = (await q("insert into auth.users (email, email_confirmed_at) values ($1, now()) returning id", [`meta-${Date.now()}@t.local`]))[0].id;
   ws = (await q("insert into public.workspaces (name, slug, created_by) values ('MetaW', $1, $2) returning id", [`metaw-${Date.now()}`, user]))[0].id;
   await q("insert into public.workspace_members (workspace_id, user_id, role) values ($1,$2,'owner')", [ws, user]);
+  // Vários perfis do Instagram no mesmo workspace: plano Agency (Starter permite 1 por rede).
+  await q("insert into public.subscriptions (workspace_id, plan) values ($1, 'agency')", [ws]);
 });
 beforeEach(async () => {
   await q("delete from public.publication_jobs");

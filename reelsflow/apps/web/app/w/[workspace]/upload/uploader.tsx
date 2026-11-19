@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { publicEnv } from "@/lib/env";
+import { planLimitMessage } from "@/lib/limits-messages";
 import { tusEndpoint } from "@/lib/upload/endpoint";
 import { sha256File } from "@/lib/upload/hash";
 import { clearPending, findPending, savePending } from "@/lib/upload/resume-store";
@@ -153,7 +154,9 @@ export function Uploader({ workspaceId, slug, maxBytes }: { workspaceId: string;
             p_workspace: workspaceId,
             p_files: [{ name: file.name, size: file.size, mime: item.mime, sha256: sha }],
           });
-          if (error || !data?.[0]) throw new Error(error?.message.includes("size") ? "Arquivo acima do limite." : "Não foi possível iniciar o envio.");
+          if (error || !data?.[0]) {
+            throw new Error(planLimitMessage(error?.message) ?? (error?.message.includes("size") ? "Arquivo acima do limite." : "Não foi possível iniciar o envio."));
+          }
           mediaId = data[0].media_id;
           storagePath = data[0].storage_path;
           savePending(workspaceId, sha, file.size, mediaId, storagePath);

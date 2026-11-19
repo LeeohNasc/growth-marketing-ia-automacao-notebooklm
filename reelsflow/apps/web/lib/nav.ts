@@ -35,13 +35,13 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "templates", label: "Modelos de Publicação", icon: FileStack, phase: 3, description: "Frequência, horários, legendas e redes reutilizáveis." },
   { key: "accounts", label: "Contas Conectadas", icon: Users, phase: 4, description: "Contas Instagram e Páginas do Facebook conectadas por OAuth oficial." },
   { key: "history", label: "Histórico", icon: History, phase: 3, description: "Publicações concluídas e falhas, com links para o conteúdo publicado." },
-  { key: "analytics", label: "Analytics", icon: ChartColumn, phase: 5, description: "Métricas reais das plataformas, quando autorizadas." },
+  { key: "analytics", label: "Analytics", icon: ChartColumn, phase: 5, description: "Desempenho operacional das publicações (dados do próprio ReelsFlow)." },
   { key: "notifications", label: "Notificações", icon: Bell, phase: 1, description: "Avisos sobre uploads, campanhas, publicações e contas." },
   { key: "settings", label: "Configurações", icon: Settings, phase: 1, description: "Nome, fuso horário padrão e membros do workspace." },
   { key: "billing", label: "Assinatura", icon: CreditCard, phase: 5, description: "Plano atual e uso medido. Cobrança real ainda não integrada." },
 ];
 
-export const IMPLEMENTED_SECTIONS = new Set(["overview", "library", "upload", "calendar", "queue", "campaigns", "templates", "accounts", "history", "notifications", "settings", "billing"]);
+export const IMPLEMENTED_SECTIONS = new Set(["overview", "library", "upload", "calendar", "queue", "campaigns", "templates", "accounts", "history", "analytics", "notifications", "settings", "billing"]);
 
 export function findNavItem(key: string) {
   return NAV_ITEMS.find((i) => i.key === key);

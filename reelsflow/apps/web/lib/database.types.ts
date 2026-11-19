@@ -216,6 +216,10 @@ export type Database = {
         permalink: string | null; published_at: string; source: "api" | "reconciled" | "manual"; created_at: string;
       }>;
       social_account_capabilities: ReadOnly<{ social_account_id: string; workspace_id: string; capability: string; granted: boolean; details: Json; checked_at: string }>;
+      workspace_invitations: ReadOnly<{
+        id: string; workspace_id: string; email: string; role: WorkspaceRole; invited_by: string | null; created_at: string;
+        expires_at: string; accepted_at: string | null; revoked_at: string | null;
+      }>;
       automation_rules: ReadOnly<{ workspace_id: string; rule_key: string; enabled: boolean; params: Json; updated_by: string | null; updated_at: string }>;
       automation_runs: ReadOnly<{
         id: number; workspace_id: string; rule_key: string; subject_type: string; subject_id: string | null; outcome: string; details: Json; dedupe_key: string | null; created_at: string;
@@ -268,6 +272,12 @@ export type Database = {
       disconnect_social_account: { Args: { p_account: string }; Returns: undefined };
       meta_data_deletion: { Args: { p_meta_user_id: string }; Returns: string };
       data_deletion_status: { Args: { p_code: string }; Returns: { status: string; accounts_removed: number; created_at: string; completed_at: string | null }[] };
+      workspace_usage: { Args: { p_workspace: string }; Returns: Json };
+      create_invitation: { Args: { p_workspace: string; p_email: string; p_role: WorkspaceRole }; Returns: string };
+      accept_invitation: { Args: { p_token: string }; Returns: string };
+      revoke_invitation: { Args: { p_id: string }; Returns: undefined };
+      invitation_preview: { Args: { p_token: string }; Returns: { workspace_name: string; role: WorkspaceRole; email: string; valid: boolean }[] };
+      publication_analytics: { Args: { p_workspace: string; p_from: string; p_to: string }; Returns: Json };
       worker_last_seen: { Args: Record<string, never>; Returns: string | null };
       set_automation_rule: { Args: { p_workspace: string; p_rule: string; p_enabled: boolean; p_params?: Json }; Returns: undefined };
       account_deletion_blockers: {

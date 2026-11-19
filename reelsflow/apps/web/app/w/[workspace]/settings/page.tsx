@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ROLE_LABELS, can, isWorkspaceRole } from "@reelsflow/domain";
-import { Badge } from "@/components/ui/badge";
+import { can, isWorkspaceRole } from "@reelsflow/domain";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireWorkspace } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { DeleteWorkspaceForm, LeaveWorkspaceForm, WorkspaceForm } from "./settings-forms";
+import { Team } from "./team";
 
 export const metadata: Metadata = { title: "Configurações" };
 
@@ -24,6 +24,14 @@ export default async function SettingsPage({ params }: { params: Promise<{ works
     ? await supabase.from("profiles").select("id, display_name").in("id", ids)
     : { data: [] as { id: string; display_name: string }[] };
   const names = new Map((profiles ?? []).map((p) => [p.id, p.display_name]));
+  const canAdmin = can(role, "manageMembers");
+  const [{ data: invites }, { data: usage }] = await Promise.all([
+    canAdmin
+      ? supabase.from("workspace_invitations").select("id, email, role, expires_at").eq("workspace_id", workspace.id).is("accepted_at", null).is("revoked_at", null).gt("expires_at", new Date().toISOString())
+      : Promise.resolve({ data: [] as { id: string; email: string; role: "viewer" | "editor" | "admin" | "owner"; expires_at: string }[] }),
+    supabase.rpc("workspace_usage", { p_workspace: workspace.id }),
+  ]);
+  const u = (usage ?? {}) as { seats?: number; limits?: { seats?: number } };
 
   const ws = { id: workspace.id, slug: workspace.slug, name: workspace.name, timezone: workspace.default_timezone };
 
@@ -43,21 +51,17 @@ export default async function SettingsPage({ params }: { params: Promise<{ works
 
       <Card>
         <CardHeader>
-          <CardTitle>Membros</CardTitle>
-          <CardDescription>Convites e gestão de equipe chegam numa fase posterior.</CardDescription>
+          <CardTitle>Equipe</CardTitle>
+          <CardDescription>Papéis: Leitura (vê tudo), Editor (vídeos, campanhas, calendário), Administrador (contas, membros, configurações), Proprietário.</CardDescription>
         </CardHeader>
         <CardContent>
-          <ul className="divide-y rounded-lg border">
-            {(members ?? []).map((m) => (
-              <li key={m.user_id} className="flex items-center gap-3 px-4 py-3 text-sm">
-                <span className="flex-1 truncate">
-                  {names.get(m.user_id) || "Sem nome"}
-                  {m.user_id === user.id && <span className="text-muted-foreground"> (você)</span>}
-                </span>
-                <Badge variant={m.role === "owner" ? "default" : "secondary"}>{isWorkspaceRole(m.role) ? ROLE_LABELS[m.role] : m.role}</Badge>
-              </li>
-            ))}
-          </ul>
+          <Team
+            slug={slug}
+            myRole={role}
+            seats={{ used: u.seats ?? (members ?? []).length, limit: u.limits?.seats ?? 1 }}
+            invites={(invites ?? []).map((i) => ({ id: i.id, email: i.email, role: i.role, expiresAt: i.expires_at }))}
+            members={(members ?? []).filter((m) => isWorkspaceRole(m.role)).map((m) => ({ userId: m.user_id, name: names.get(m.user_id) ?? "", role: m.role as "viewer" | "editor" | "admin" | "owner", isMe: m.user_id === user.id }))}
+          />
         </CardContent>
       </Card>
 

@@ -39,7 +39,7 @@ Entregáveis: README, PRD, ARCHITECTURE, DATABASE, API_INTEGRATIONS, SECURITY, R
 
 **Critério de saída interno:** publicação real em contas com papel no app (modo desenvolvimento). **Critério externo:** App Review aprovado → publicação em contas de clientes. Este último **não depende de mim**.
 
-## Fase 5 — Expansão (após validação)
+## Fase 5 — Expansão ⚠️ parcial: equipes, limites e analytics interno (ver PHASE-5.md)
 TikTok (após auditoria), YouTube (após verificação/auditoria), IA (sugestões revisáveis), analytics com dados reais, cobrança, equipes/aprovação, e-mail transacional, transcodificação.
 
 ## Prontidão para produção (além das fases)

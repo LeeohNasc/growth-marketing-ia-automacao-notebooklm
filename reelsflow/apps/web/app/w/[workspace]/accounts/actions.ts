@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { MOCK_BEHAVIORS } from "@reelsflow/connectors";
 import type { ActionState } from "@/lib/action-state";
 import type { Json } from "@/lib/database.types";
+import { planLimitMessage } from "@/lib/limits-messages";
 import { requireWorkspace } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 
@@ -58,7 +59,7 @@ export async function finalizeConnectionAction(_prev: ActionState, formData: For
   if (!keys.length) return { message: "Selecione ao menos uma conta." };
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("finalize_oauth", { p_state: state, p_keys: keys });
-  if (error) return { message: "A sessão de conexão expirou ou já foi usada. Inicie a conexão novamente." };
+  if (error) return { message: planLimitMessage(error.message) ?? "A sessão de conexão expirou ou já foi usada. Inicie a conexão novamente." };
   revalidatePath(`/w/${slug}/accounts`);
   redirect(`/w/${slug}/accounts?connected=${data ?? 0}`);
 }

@@ -36,7 +36,7 @@ export async function signUpAction(_prev: ActionState, formData: FormData): Prom
     password: parsed.data.password,
     options: {
       data: { display_name: parsed.data.displayName },
-      emailRedirectTo: siteUrl("/auth/confirm?next=/onboarding"),
+      emailRedirectTo: siteUrl(`/auth/confirm?next=${encodeURIComponent(safeRedirectPath(formData.get("next")?.toString(), "/onboarding"))}`),
     },
   });
   // E-mail já cadastrado não gera erro (o Supabase responde igual) — evita enumeração.

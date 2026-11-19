@@ -37,3 +37,14 @@ test.describe("páginas legais e integração Meta (sem credenciais)", () => {
     await expect(page).toHaveURL(/\/login/);
   });
 });
+
+test.describe("equipes e analytics (sem sessão)", () => {
+  test("convite com token inválido mostra indisponível", async ({ page }) => {
+    await page.goto("/invite/abc");
+    await expect(page.getByText("Convite indisponível")).toBeVisible();
+  });
+  test("analytics exige login", async ({ page }) => {
+    await page.goto("/w/qualquer/analytics");
+    await expect(page).toHaveURL(/\/login/);
+  });
+});
