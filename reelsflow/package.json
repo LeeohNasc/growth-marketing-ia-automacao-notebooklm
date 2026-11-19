@@ -1,0 +1,15 @@
+{
+  "name": "reelsflow",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "pnpm --filter @reelsflow/web dev",
+    "build": "pnpm --filter @reelsflow/web build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm --filter @reelsflow/domain test",
+    "test:db": "bash scripts/test-db.sh",
+    "test:e2e": "pnpm --filter @reelsflow/web test:e2e"
+  }
+}

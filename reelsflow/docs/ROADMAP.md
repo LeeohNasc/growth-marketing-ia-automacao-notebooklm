@@ -2,10 +2,10 @@
 
 Cada fase termina com relatório (implementado, arquivos, testes, resultados, pendências, riscos, próxima fase) e **aguarda aprovação** antes da seguinte.
 
-## Fase 0 — Auditoria e planejamento ✅ (aguardando aprovação)
+## Fase 0 — Auditoria e planejamento ✅ aprovada
 Entregáveis: README, PRD, ARCHITECTURE, DATABASE, API_INTEGRATIONS, SECURITY, ROADMAP, RISKS.
 
-## Fase 1 — Fundação
+## Fase 1 — Fundação ✅ concluída no código (aguardando aprovação; ver PHASE-1.md)
 - Monorepo pnpm (`apps/web`, `apps/worker`, `packages/*`), TypeScript strict, ESLint, Prettier, CI (typecheck, lint, test, varredura de segredos).
 - Next.js App Router + Tailwind + shadcn/ui; tema grafite/coral, dark padrão, light opcional.
 - Supabase: projeto de desenvolvimento (**requer sua autorização para criar**); migrations de `profiles`, `workspaces`, `workspace_members`, `audit_logs`, `notifications`, `subscriptions`, `usage_records`.

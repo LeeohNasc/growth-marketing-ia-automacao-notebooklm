@@ -8,8 +8,9 @@ SaaS de upload em massa e publicação automática e recorrente de vídeos curto
 
 | Item | Estado |
 |---|---|
-| Fase 0 — Auditoria e planejamento | **Concluída (aguardando aprovação)** |
-| Código de aplicação | Não iniciado (proposital — ver regra 12 do prompt mestre) |
+| Fase 0 — Auditoria e planejamento | Concluída e aprovada |
+| Fase 1 — Fundação | **Concluída no código (aguardando aprovação)** — ver [docs/PHASE-1.md](docs/PHASE-1.md) |
+| Projeto Supabase | **Não criado** (requer sua autorização) — auth real ainda não exercitado |
 | Integrações externas | Nenhuma conectada ou testada |
 | Infraestrutura | Nenhum serviço criado, nenhum custo assumido |
 
@@ -31,6 +32,34 @@ Legenda usada em toda a documentação:
 | [docs/SECURITY.md](docs/SECURITY.md) | Ameaças, controles, tokens, LGPD |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Fases, entregáveis e critérios de saída |
 | [docs/RISKS.md](docs/RISKS.md) | Riscos técnicos, operacionais, jurídicos e decisões pendentes |
+
+## Como rodar
+
+Requisitos: Node 22, pnpm 10, Postgres 16 (só para os testes de RLS locais).
+
+```bash
+pnpm install
+cp apps/web/.env.example apps/web/.env.local   # preencha com o projeto Supabase
+pnpm dev                                       # http://localhost:3000
+
+pnpm typecheck && pnpm lint                    # TypeScript strict + ESLint
+pnpm test                                      # regras de domínio (Vitest)
+pnpm test:db                                   # migrations + RLS em Postgres efêmero
+pnpm build && pnpm test:e2e                    # build + Playwright (desktop e mobile)
+```
+
+Aplicar o schema num projeto Supabase: `supabase link` + `supabase db push` (aplica `supabase/migrations/`).
+Configuração do Auth no painel do Supabase: **Site URL** = `NEXT_PUBLIC_SITE_URL`; **Redirect URLs** incluindo `<site>/auth/confirm`; confirmação de e-mail ativada.
+
+## Estrutura
+
+```
+apps/web/            Next.js 16 (App Router, proxy.ts), Tailwind 4, componentes no padrão shadcn/ui
+packages/domain/     regras puras (papéis, validação Zod) — testadas
+supabase/migrations/ schema versionado (única fonte de verdade)
+supabase/tests/      testes de RLS (Vitest + pg) e shim mínimo do Supabase
+scripts/test-db.sh   sobe Postgres efêmero, aplica migrations e roda os testes
+```
 
 ## Stack proposta (resumo)
 

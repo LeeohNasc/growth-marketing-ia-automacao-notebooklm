@@ -1,0 +1,55 @@
+name: ReelsFlow CI
+
+on:
+  push:
+    paths: ["reelsflow/**", ".github/workflows/reelsflow-ci.yml"]
+  pull_request:
+    paths: ["reelsflow/**", ".github/workflows/reelsflow-ci.yml"]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: reelsflow
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3100
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:9
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: reelsflow/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: reelsflow/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - name: Testes unitários (domínio)
+        run: pnpm test
+      - name: Migrations + testes de RLS
+        run: pnpm test:db
+        env:
+          DATABASE_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      - run: pnpm build
+      - name: Playwright browsers
+        run: pnpm --filter @reelsflow/web exec playwright install --with-deps chromium
+      - name: E2E
+        run: pnpm test:e2e

@@ -15,7 +15,7 @@ Versão 0.1 · Fase 0 · PostgreSQL (Supabase). Schema definitivo será criado p
 | Tabela | Colunas principais | Notas |
 |---|---|---|
 | `profiles` | `id` (= auth.users.id), `display_name`, `locale`, `default_timezone` | Criado por trigger no signup |
-| `workspaces` | `name`, `slug` unique, `owner_id`, `default_timezone`, `is_demo bool`, `queue_paused bool`, `settings jsonb` (defaults globais) | |
+| `workspaces` | `name`, `slug` unique, `created_by` (nullable, set null), `default_timezone`, `is_demo bool`, `queue_paused bool`, `settings jsonb` (defaults globais) | |
 | `workspace_members` | `workspace_id`, `user_id`, `role` (`owner/admin/editor/viewer`) | unique (workspace_id, user_id) |
 
 ### Contas sociais
@@ -55,6 +55,13 @@ Versão 0.1 · Fase 0 · PostgreSQL (Supabase). Schema definitivo será criado p
 | `subscriptions` | `plan` (`starter/pro/agency`), `status`, `limits jsonb`, `provider_ref` (null até haver cobrança) | |
 | `usage_records` | `metric` (`storage_bytes/uploads/publications/accounts/ai_tokens/processing_seconds`), `quantity`, `period_start` | |
 | `worker_heartbeats` | `worker_id`, `last_seen_at`, `version` | Sem workspace_id; sem acesso do cliente |
+
+### Regras de integridade implementadas na Fase 1
+- Propriedade é definida por `workspace_members.role = 'owner'` (não por coluna em `workspaces`). `created_by` é só histórico.
+- Trigger `guard_last_owner`: um workspace com outros membros nunca fica sem owner (rebaixamento, saída, remoção ou exclusão da conta do último owner são recusados).
+- Trigger `cleanup_empty_workspace`: quando o último membro sai (ou tem a conta excluída), o workspace é apagado.
+- Workspaces só são criados pela RPC `create_workspace` (exige e-mail confirmado), que cria membership owner + assinatura starter + auditoria na mesma transação.
+- Grants por coluna: o cliente só altera `name/default_timezone/queue_paused/settings` (workspaces), `display_name/locale/default_timezone` (profiles) e `role` (members).
 
 ## 3. `publication_jobs`
 
