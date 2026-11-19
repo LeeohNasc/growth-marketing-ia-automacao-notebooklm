@@ -70,7 +70,7 @@ test.describe("formulários de autenticação", () => {
 });
 
 test.describe("controle de acesso", () => {
-  for (const path of ["/w", "/w/qualquer/overview", "/w/qualquer/settings", "/w/qualquer/library", "/w/qualquer/upload", "/onboarding", "/account", "/reset-password"]) {
+  for (const path of ["/w", "/w/qualquer/overview", "/w/qualquer/settings", "/w/qualquer/library", "/w/qualquer/upload", "/w/qualquer/calendar", "/w/qualquer/queue", "/w/qualquer/campaigns/new", "/w/qualquer/templates", "/w/qualquer/accounts", "/w/qualquer/automations", "/onboarding", "/account", "/reset-password"]) {
     test(`${path} exige login`, async ({ page }) => {
       await page.goto(path);
       await expect(page).toHaveURL(/\/login(\?|$)/);

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { ROLE_LABELS, can, isWorkspaceRole } from "@reelsflow/domain";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,6 +58,18 @@ export default async function SettingsPage({ params }: { params: Promise<{ works
               </li>
             ))}
           </ul>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Automações</CardTitle>
+          <CardDescription>Regras de retry, avisos de pouco conteúdo, conclusão de campanhas e reação à perda de autorização.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Link href={`/w/${slug}/automations`} className="text-sm font-medium text-primary hover:underline">
+            Configurar automações →
+          </Link>
         </CardContent>
       </Card>
 

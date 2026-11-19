@@ -8,7 +8,7 @@
     "build": "pnpm --filter @reelsflow/web build",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
-    "test": "pnpm --filter @reelsflow/domain test",
+    "test": "pnpm --filter @reelsflow/domain --filter @reelsflow/connectors test",
     "test:db": "bash scripts/test-db.sh",
     "test:e2e": "pnpm --filter @reelsflow/web test:e2e"
   }

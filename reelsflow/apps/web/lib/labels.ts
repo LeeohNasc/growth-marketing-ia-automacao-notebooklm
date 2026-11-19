@@ -1,0 +1,39 @@
+export const CAMPAIGN_STATUS = {
+  draft: { label: "Rascunho", variant: "secondary" },
+  active: { label: "Ativa", variant: "success" },
+  paused: { label: "Pausada", variant: "warning" },
+  completed: { label: "Concluída", variant: "outline" },
+  archived: { label: "Arquivada", variant: "outline" },
+} as const;
+
+export const NOTIFICATION_LABELS: Record<string, string> = {
+  "upload.completed": "Upload concluído",
+  "upload.failed": "Upload com falha",
+  "campaign.started": "Campanha iniciada",
+  "campaign.completed": "Campanha concluída",
+  "publication.published": "Publicação realizada",
+  "publication.failed": "Publicação com erro",
+  "publication.late": "Publicação atrasada enviada para revisão",
+  "publication.needs_review": "Publicação requer revisão",
+  "account.disconnected": "Conta desconectada",
+  "account.token_expiring": "Autorização expirando",
+  "queue.low": "Pouco conteúdo na fila",
+  "plan.limit_reached": "Limite do plano atingido",
+};
+
+export const REVIEW_REASONS: Record<string, string> = {
+  late: "Passou do horário além da tolerância (ex.: sistema indisponível).",
+  uncertain_unresolved: "Não foi possível confirmar na plataforma se foi publicado.",
+  scheduled_time_passed_before_activation: "O horário passou antes da ativação da campanha.",
+};
+
+export const ERROR_CLASS_LABELS: Record<string, string> = {
+  transient: "Falha temporária da plataforma",
+  rate_limited: "Limite de requisições",
+  auth: "Autorização da conta",
+  permanent: "Rejeitado pela plataforma",
+  timeout: "Tempo esgotado",
+  unknown: "Erro desconhecido",
+  media_unavailable: "Vídeo excluído ou indisponível",
+  lease_expired: "Processamento interrompido",
+};

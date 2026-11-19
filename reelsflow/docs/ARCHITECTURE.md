@@ -64,6 +64,10 @@ reelsflow/
 | ADR-07 | Criptografia de tokens na aplicação (AES-256-GCM, chave fora do banco) | Supabase Vault; texto puro protegido só por RLS | Vazamento do banco sozinho não expõe tokens. Trade-off: rotação de chave é responsabilidade nossa (campo `key_version`). |
 | ADR-08 | Regras de automação pré-definidas no MVP | Motor genérico configurável | Menor superfície de erro; o genérico só se justifica com demanda observada. |
 | ADR-09 | IA fora do caminho crítico | — | Publicação não pode depender de serviço de IA. |
+| ADR-10 | Plano calculado na aplicação (packages/domain), gravado por RPC que revalida | Plano em PL/pgSQL | Regras de fuso/DST testáveis em TypeScript com Temporal; o banco garante propriedade, horários futuros e não duplicidade. Trade-off: duas camadas a manter coerentes. |
+| ADR-11 | Janela de congelamento de 2 min (não 10 min) | 10 min | Permite testar com o conector simulado em minutos; revisar para conectores reais, cujo preparo (container IG) exige antecedência. |
+| ADR-12 | Reagendamento manual "fixa" a publicação | Recalcular tudo | Recalcular não desfaz decisões do usuário; custo: um slot pode ficar com duas publicações (o espaçamento resolve e o conflito é mostrado). |
+| ADR-13 | No máximo uma publicação em andamento por conta, garantida por índice único | Só lógica no claim | Defesa em profundidade contra condições de corrida. |
 
 ## 4. Motor de agendamento
 

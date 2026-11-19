@@ -22,7 +22,7 @@ Entregáveis: README, PRD, ARCHITECTURE, DATABASE, API_INTEGRATIONS, SECURITY, R
 
 **Critério de saída:** 50+ vídeos enviados num teste, upload interrompido e retomado, duplicado detectado, arquivo inválido rejeitado, acesso cruzado ao storage negado.
 
-## Fase 3 — Agendamento (100% com conector mock)
+## Fase 3 — Agendamento (100% com conector mock) ✅ concluída no código (aguardando aprovação; ver PHASE-3.md)
 - `packages/domain`: slots, DST, precedência, ordem, máquina de estados.
 - Modelos, campanhas (wizard), calendário (dia/semana/mês/lista, drag-and-drop), fila operacional, pausas, edição/recálculo.
 - Worker: scheduler, claim com `SKIP LOCKED`, lease/heartbeat, reaper, retry com backoff, DLQ, reconciler, política de atraso, espaçamento.

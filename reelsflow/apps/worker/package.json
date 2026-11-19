@@ -15,7 +15,8 @@
     "@supabase/supabase-js": "2.119.0",
     "pg": "8.23.1",
     "tsx": "4.23.15",
-    "zod": "4.6.7"
+    "zod": "4.6.7",
+    "@reelsflow/connectors": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "22.20.5",

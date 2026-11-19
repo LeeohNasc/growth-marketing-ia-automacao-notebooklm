@@ -4,24 +4,12 @@ import { SubmitButton } from "@/components/form";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireWorkspace } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
+import { NOTIFICATION_LABELS as TYPE_LABELS } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import { markAllReadAction } from "./actions";
 
 export const metadata: Metadata = { title: "Notificações" };
 
-/** Rótulos dos tipos previstos no PRD §4.7. Tipos desconhecidos aparecem pelo código. */
-const TYPE_LABELS: Record<string, string> = {
-  "upload.completed": "Upload concluído",
-  "upload.failed": "Upload com falha",
-  "campaign.started": "Campanha iniciada",
-  "campaign.completed": "Campanha concluída",
-  "publication.published": "Publicação realizada",
-  "publication.failed": "Publicação com erro",
-  "account.disconnected": "Conta desconectada",
-  "account.token_expiring": "Autorização expirando",
-  "queue.low": "Pouco conteúdo na fila",
-  "plan.limit_reached": "Limite do plano atingido",
-};
 
 export default async function NotificationsPage({ params }: { params: Promise<{ workspace: string }> }) {
   const { workspace: slug } = await params;

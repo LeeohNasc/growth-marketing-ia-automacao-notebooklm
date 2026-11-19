@@ -43,6 +43,46 @@ export type MediaAssetRow = {
 
 type Timestamps = { created_at: string };
 
+export type SocialPlatform = "instagram" | "facebook" | "tiktok" | "youtube" | "mock";
+export type CampaignStatus = "draft" | "active" | "paused" | "completed" | "archived";
+export type JobStatusDb =
+  | "draft" | "scheduled" | "queued" | "preparing" | "uploading" | "processing_remote" | "publishing"
+  | "published" | "failed_retryable" | "failed_permanent" | "uncertain" | "needs_review" | "cancelled";
+
+export type SocialAccountRow = {
+  id: string; workspace_id: string; platform: SocialPlatform; external_account_id: string; display_name: string;
+  avatar_url: string | null; status: "active" | "needs_reauth" | "disconnected"; paused: boolean; min_spacing_minutes: number;
+  settings: Json; connected_by: string | null; token_expires_at: string | null; created_at: string; updated_at: string;
+};
+export type TemplateRow = {
+  id: string; workspace_id: string; name: string; mode: "mirrored" | "independent"; timezone: string; weekdays: number[]; times: string[];
+  caption: string | null; hashtags: string[]; order_strategy: string; max_lateness_minutes: number; created_by: string | null;
+  created_at: string; updated_at: string;
+};
+export type CampaignRow = {
+  id: string; workspace_id: string; template_id: string | null; source_collection_id: string | null; name: string; status: CampaignStatus;
+  mode: "mirrored" | "independent"; timezone: string; weekdays: number[]; times: string[]; start_date: string; end_date: string | null;
+  order_strategy: string; random_seed: number; caption: string | null; hashtags: string[]; max_lateness_minutes: number;
+  activated_at: string | null; completed_at: string | null; summary: Json | null; created_by: string | null; created_at: string; updated_at: string;
+};
+export type CampaignTargetRow = {
+  id: string; campaign_id: string; workspace_id: string; social_account_id: string; offset_minutes: number; weekdays: number[] | null;
+  times: string[] | null; caption_override: string | null; hashtags_override: string[] | null; enabled: boolean; created_at: string;
+};
+export type CampaignMediaRow = {
+  id: string; campaign_id: string; workspace_id: string; media_asset_id: string; target_id: string | null; position: number;
+  caption_override: string | null; hashtags_override: string[] | null; added_at: string;
+};
+export type PublicationJobRow = {
+  id: string; workspace_id: string; campaign_id: string | null; campaign_media_id: string | null; target_id: string | null;
+  social_account_id: string | null; media_asset_id: string | null; post_group_key: string | null; local_date: string; local_time: string;
+  timezone: string; scheduled_at: string; dst_adjusted: boolean; status: JobStatusDb; caption_override: string | null; effective_config: Json | null;
+  attempt_count: number; max_attempts: number; next_attempt_at: string; lease_owner: string | null; lease_expires_at: string | null;
+  external_checkpoint: Json | null; reconcile_attempts: number; last_error_class: string | null; last_error_message: string | null;
+  review_reason: string | null; pinned: boolean; published_at: string | null; created_at: string; updated_at: string;
+};
+type ReadOnly<R> = { Row: R; Insert: never; Update: never; Relationships: [] };
+
 export type Database = {
   public: {
     Tables: {
@@ -133,6 +173,52 @@ export type Database = {
         Update: never;
         Relationships: [];
       };
+      social_accounts: {
+        Row: SocialAccountRow;
+        Insert: never;
+        Update: { display_name?: string; paused?: boolean; min_spacing_minutes?: number; settings?: Json };
+        Relationships: [];
+      };
+      publication_templates: {
+        Row: TemplateRow;
+        Insert: Omit<TemplateRow, "id" | "created_at" | "updated_at" | "hashtags" | "caption" | "order_strategy" | "max_lateness_minutes" | "mode"> &
+          Partial<Pick<TemplateRow, "hashtags" | "caption" | "order_strategy" | "max_lateness_minutes" | "mode">>;
+        Update: Partial<Pick<TemplateRow, "name" | "mode" | "timezone" | "weekdays" | "times" | "caption" | "hashtags" | "order_strategy" | "max_lateness_minutes">>;
+        Relationships: [];
+      };
+      campaigns: {
+        Row: CampaignRow;
+        Insert: Pick<CampaignRow, "workspace_id" | "name" | "timezone" | "weekdays" | "times" | "start_date" | "created_by"> &
+          Partial<Pick<CampaignRow, "template_id" | "source_collection_id" | "mode" | "end_date" | "order_strategy" | "caption" | "hashtags" | "max_lateness_minutes">>;
+        Update: Partial<Pick<CampaignRow, "template_id" | "source_collection_id" | "name" | "mode" | "timezone" | "weekdays" | "times" | "start_date" | "end_date" | "order_strategy" | "random_seed" | "caption" | "hashtags" | "max_lateness_minutes">>;
+        Relationships: [];
+      };
+      campaign_targets: {
+        Row: CampaignTargetRow;
+        Insert: Pick<CampaignTargetRow, "campaign_id" | "workspace_id" | "social_account_id"> & Partial<Pick<CampaignTargetRow, "offset_minutes" | "weekdays" | "times" | "caption_override" | "hashtags_override" | "enabled">>;
+        Update: Partial<Pick<CampaignTargetRow, "offset_minutes" | "weekdays" | "times" | "caption_override" | "hashtags_override" | "enabled">>;
+        Relationships: [];
+      };
+      campaign_media: {
+        Row: CampaignMediaRow;
+        Insert: Pick<CampaignMediaRow, "campaign_id" | "workspace_id" | "media_asset_id"> & Partial<Pick<CampaignMediaRow, "target_id" | "position" | "caption_override" | "hashtags_override">>;
+        Update: Partial<Pick<CampaignMediaRow, "position" | "caption_override" | "hashtags_override">>;
+        Relationships: [];
+      };
+      publication_jobs: ReadOnly<PublicationJobRow>;
+      publication_attempts: ReadOnly<{
+        id: number; job_id: string; workspace_id: string; attempt_no: number; worker_id: string; kind: "publish" | "reconcile";
+        started_at: string; finished_at: string | null; phase_reached: string | null; outcome: string | null; error_class: string | null;
+        error_code: string | null; error_message: string | null; retry_after_seconds: number | null; checkpoint: Json | null;
+      }>;
+      external_publications: ReadOnly<{
+        id: string; job_id: string; workspace_id: string; social_account_id: string | null; platform: SocialPlatform; external_id: string | null;
+        permalink: string | null; published_at: string; source: "api" | "reconciled" | "manual"; created_at: string;
+      }>;
+      automation_rules: ReadOnly<{ workspace_id: string; rule_key: string; enabled: boolean; params: Json; updated_by: string | null; updated_at: string }>;
+      automation_runs: ReadOnly<{
+        id: number; workspace_id: string; rule_key: string; subject_type: string; subject_id: string | null; outcome: string; details: Json; dedupe_key: string | null; created_at: string;
+      }>;
       audit_logs: {
         Row: {
           id: number;
@@ -165,12 +251,22 @@ export type Database = {
       restore_media: { Args: { p_ids: string[] }; Returns: number };
       retry_media_processing: { Args: { p_ids: string[] }; Returns: number };
       reorder_collection: { Args: { p_collection: string; p_media: string[] }; Returns: undefined };
+      create_simulated_account: { Args: { p_workspace: string; p_name: string; p_behavior?: string }; Returns: SocialAccountRow };
+      delete_social_account: { Args: { p_account: string }; Returns: undefined };
+      save_campaign_plan: { Args: { p_campaign: string; p_jobs: Json; p_replace?: boolean }; Returns: { inserted: number; skipped_duplicates: number; removed: number }[] };
+      set_campaign_status: { Args: { p_campaign: string; p_action: string }; Returns: CampaignStatus };
+      cancel_jobs: { Args: { p_ids: string[] }; Returns: number };
+      reschedule_job: { Args: { p_job: string; p_at: string }; Returns: undefined };
+      update_job_caption: { Args: { p_job: string; p_caption: string }; Returns: undefined };
+      confirm_job_published: { Args: { p_job: string; p_permalink?: string }; Returns: undefined };
+      worker_last_seen: { Args: Record<string, never>; Returns: string | null };
+      set_automation_rule: { Args: { p_workspace: string; p_rule: string; p_enabled: boolean; p_params?: Json }; Returns: undefined };
       account_deletion_blockers: {
         Args: Record<string, never>;
         Returns: { workspace_id: string; workspace_name: string; other_members: number }[];
       };
     };
-    Enums: { workspace_role: WorkspaceRole; media_status: MediaStatus };
+    Enums: { workspace_role: WorkspaceRole; media_status: MediaStatus; social_platform: SocialPlatform; campaign_status: CampaignStatus; job_status: JobStatusDb };
     CompositeTypes: Record<string, never>;
   };
 };

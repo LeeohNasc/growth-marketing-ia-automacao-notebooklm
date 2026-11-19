@@ -10,7 +10,8 @@ SaaS de upload em massa e publicação automática e recorrente de vídeos curto
 |---|---|
 | Fase 0 — Auditoria e planejamento | Concluída e aprovada |
 | Fase 1 — Fundação | Concluída no código — ver [docs/PHASE-1.md](docs/PHASE-1.md) |
-| Fase 2 — Biblioteca | **Concluída no código (aguardando aprovação)** — ver [docs/PHASE-2.md](docs/PHASE-2.md) |
+| Fase 2 — Biblioteca | Concluída no código — ver [docs/PHASE-2.md](docs/PHASE-2.md) |
+| Fase 3 — Agendamento | **Concluída no código com conector simulado (aguardando aprovação)** — ver [docs/PHASE-3.md](docs/PHASE-3.md) |
 | Projeto Supabase | **Não criado** (requer sua autorização) — auth real ainda não exercitado |
 | Integrações externas | Nenhuma conectada ou testada |
 | Infraestrutura | Nenhum serviço criado, nenhum custo assumido |
@@ -44,8 +45,8 @@ cp apps/web/.env.example apps/web/.env.local   # preencha com o projeto Supabase
 pnpm dev                                       # http://localhost:3000
 
 pnpm typecheck && pnpm lint                    # TypeScript strict + ESLint
-pnpm test                                      # regras de domínio (Vitest)
-pnpm test:db                                   # migrations + RLS + integração do worker (Postgres efêmero, ffmpeg)
+pnpm test                                      # domínio + conectores (Vitest)
+pnpm test:db                                   # migrations + RLS + worker (mídia e publicação) em Postgres efêmero
 pnpm build && pnpm test:e2e                    # build + Playwright (desktop e mobile)
 ```
 
@@ -59,7 +60,8 @@ Configuração do Auth no painel do Supabase: **Site URL** = `NEXT_PUBLIC_SITE_U
 ```
 apps/web/            Next.js 16 (App Router, proxy.ts), Tailwind 4, componentes no padrão shadcn/ui
 apps/worker/         processo contínuo: fila de mídia (lease/retry), ffprobe/ffmpeg, limpeza de storage
-packages/domain/     regras puras (papéis, validação Zod) — testadas
+packages/domain/     regras puras: papéis, validação, mídia, agendamento (slots/DST, plano, precedência, estados) — testadas
+packages/connectors/ contrato de conectores + conector simulado (mock) + disponibilidade por rede
 supabase/migrations/ schema versionado (única fonte de verdade)
 supabase/tests/      testes de RLS (Vitest + pg) e shim mínimo do Supabase
 scripts/test-db.sh   sobe Postgres efêmero, aplica migrations e roda os testes
