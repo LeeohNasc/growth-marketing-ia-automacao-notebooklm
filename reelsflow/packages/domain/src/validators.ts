@@ -101,3 +101,16 @@ export function fieldErrors(error: z.ZodError): Record<string, string> {
   }
   return out;
 }
+
+export const updateMediaSchema = z.object({
+  name: z.string().trim().min(1, { message: "Informe um nome." }).max(200, { message: "Máximo de 200 caracteres." }),
+  caption: z.string().max(2200, { message: "Máximo de 2.200 caracteres." }),
+  hashtags: z.string().max(4000),
+});
+
+export const collectionNameSchema = z.string().trim().min(1, { message: "Informe um nome." }).max(80, { message: "Máximo de 80 caracteres." });
+
+/** Termo de busca seguro para ILIKE (escapa curingas). */
+export function ilikePattern(term: string): string {
+  return `%${term.trim().slice(0, 100).replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+}

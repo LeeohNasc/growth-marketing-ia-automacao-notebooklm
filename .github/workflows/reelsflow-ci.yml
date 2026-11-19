@@ -39,12 +39,14 @@ jobs:
           node-version: 22
           cache: pnpm
           cache-dependency-path: reelsflow/pnpm-lock.yaml
+      - name: ffmpeg (testes do worker)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
       - name: Testes unitários (domínio)
         run: pnpm test
-      - name: Migrations + testes de RLS
+      - name: Migrations + testes de RLS + integração do worker
         run: pnpm test:db
         env:
           DATABASE_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/postgres

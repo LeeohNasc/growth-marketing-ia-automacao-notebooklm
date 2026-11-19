@@ -63,6 +63,12 @@ Versão 0.1 · Fase 0 · PostgreSQL (Supabase). Schema definitivo será criado p
 - Workspaces só são criados pela RPC `create_workspace` (exige e-mail confirmado), que cria membership owner + assinatura starter + auditoria na mesma transação.
 - Grants por coluna: o cliente só altera `name/default_timezone/queue_paused/settings` (workspaces), `display_name/locale/default_timezone` (profiles) e `role` (members).
 
+### Desvios do modelo original, adotados na Fase 2
+- **`upload_sessions` não existe**: o vídeo é registrado em `media_assets` com `status = 'uploading'` desde o início do envio (`upload_expires_at` controla abandono). Uma tabela a menos e um só identificador do começo ao fim.
+- **`media_jobs`**: fila técnica do worker (probe/thumbnail e purge), separada de `publication_jobs` (Fase 3), com lease, tentativas e backoff.
+- **`storage_gc`**: prefixos de storage a apagar após exclusão de workspace — sem FK, para sobreviver à cascata.
+- **Storage**: bucket privado `media`; caminho `{workspace_id}/{media_id}/original.{ext}` e `thumb.jpg`. O cliente só grava em caminhos pré-registrados por `begin_media_upload` e ainda em `uploading`; não altera nem apaga objetos.
+
 ## 3. `publication_jobs`
 
 ```sql

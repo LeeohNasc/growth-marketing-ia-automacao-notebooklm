@@ -14,7 +14,7 @@ Entregáveis: README, PRD, ARCHITECTURE, DATABASE, API_INTEGRATIONS, SECURITY, R
 
 **Critério de saída:** typecheck/lint/testes verdes; testes de RLS de isolamento A×B passando; fluxo de auth testado com Playwright.
 
-## Fase 2 — Biblioteca
+## Fase 2 — Biblioteca ✅ concluída no código (aguardando aprovação; ver PHASE-2.md)
 - Upload TUS em massa (progresso, cancelamento, retomada), hash no cliente, detecção de duplicados.
 - Worker: job de probe (`ffprobe`), thumbnail, compatibilidade por plataforma.
 - Biblioteca (grade/lista, filtros, busca, coleções, seleção múltipla, detalhes, player, exclusão com tratamento de dependências).

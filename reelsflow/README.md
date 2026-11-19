@@ -9,7 +9,8 @@ SaaS de upload em massa e publicação automática e recorrente de vídeos curto
 | Item | Estado |
 |---|---|
 | Fase 0 — Auditoria e planejamento | Concluída e aprovada |
-| Fase 1 — Fundação | **Concluída no código (aguardando aprovação)** — ver [docs/PHASE-1.md](docs/PHASE-1.md) |
+| Fase 1 — Fundação | Concluída no código — ver [docs/PHASE-1.md](docs/PHASE-1.md) |
+| Fase 2 — Biblioteca | **Concluída no código (aguardando aprovação)** — ver [docs/PHASE-2.md](docs/PHASE-2.md) |
 | Projeto Supabase | **Não criado** (requer sua autorização) — auth real ainda não exercitado |
 | Integrações externas | Nenhuma conectada ou testada |
 | Infraestrutura | Nenhum serviço criado, nenhum custo assumido |
@@ -44,9 +45,11 @@ pnpm dev                                       # http://localhost:3000
 
 pnpm typecheck && pnpm lint                    # TypeScript strict + ESLint
 pnpm test                                      # regras de domínio (Vitest)
-pnpm test:db                                   # migrations + RLS em Postgres efêmero
+pnpm test:db                                   # migrations + RLS + integração do worker (Postgres efêmero, ffmpeg)
 pnpm build && pnpm test:e2e                    # build + Playwright (desktop e mobile)
 ```
+
+Worker: `cp apps/worker/.env.example apps/worker/.env` e `pnpm --filter @reelsflow/worker start` (requer ffmpeg). Imagem: `apps/worker/Dockerfile`.
 
 Aplicar o schema num projeto Supabase: `supabase link` + `supabase db push` (aplica `supabase/migrations/`).
 Configuração do Auth no painel do Supabase: **Site URL** = `NEXT_PUBLIC_SITE_URL`; **Redirect URLs** incluindo `<site>/auth/confirm`; confirmação de e-mail ativada.
@@ -55,6 +58,7 @@ Configuração do Auth no painel do Supabase: **Site URL** = `NEXT_PUBLIC_SITE_U
 
 ```
 apps/web/            Next.js 16 (App Router, proxy.ts), Tailwind 4, componentes no padrão shadcn/ui
+apps/worker/         processo contínuo: fila de mídia (lease/retry), ffprobe/ffmpeg, limpeza de storage
 packages/domain/     regras puras (papéis, validação Zod) — testadas
 supabase/migrations/ schema versionado (única fonte de verdade)
 supabase/tests/      testes de RLS (Vitest + pg) e shim mínimo do Supabase

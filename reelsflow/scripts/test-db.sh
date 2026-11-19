@@ -38,5 +38,8 @@ for f in "$ROOT"/supabase/migrations/*.sql; do
   psql "$TEST_URL" -v ON_ERROR_STOP=1 -q -f "$f"
 done
 
-cd "$ROOT/supabase/tests"
-DATABASE_URL="$TEST_URL" pnpm exec vitest run "$@"
+export DATABASE_URL="$TEST_URL"
+echo "→ testes de RLS"
+(cd "$ROOT/supabase/tests" && pnpm exec vitest run "$@")
+echo "→ testes de integração do worker"
+(cd "$ROOT/apps/worker" && pnpm exec vitest run "$@")

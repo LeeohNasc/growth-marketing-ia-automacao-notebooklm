@@ -41,7 +41,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "billing", label: "Assinatura", icon: CreditCard, phase: 5, description: "Plano atual e uso medido. Cobrança real ainda não integrada." },
 ];
 
-export const IMPLEMENTED_SECTIONS = new Set(["overview", "notifications", "settings", "billing"]);
+export const IMPLEMENTED_SECTIONS = new Set(["overview", "library", "upload", "notifications", "settings", "billing"]);
 
 export function findNavItem(key: string) {
   return NAV_ITEMS.find((i) => i.key === key);
