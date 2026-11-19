@@ -23,7 +23,17 @@ export function SignUpForm() {
       <div className="grid gap-1">
         <label className="flex items-start gap-2 text-sm text-muted-foreground">
           <input type="checkbox" name="terms" className="mt-0.5 size-4 accent-[var(--primary)]" aria-invalid={state.fieldErrors?.terms ? true : undefined} />
-          <span>Li e aceito os termos de uso e a política de privacidade.</span>
+          <span>
+            Li e aceito os{" "}
+            <a href="/terms" target="_blank" className="underline">
+              termos de uso
+            </a>{" "}
+            e a{" "}
+            <a href="/privacy" target="_blank" className="underline">
+              política de privacidade
+            </a>
+            .
+          </span>
         </label>
         {state.fieldErrors?.terms && <p className="text-xs text-destructive">{state.fieldErrors.terms}</p>}
       </div>

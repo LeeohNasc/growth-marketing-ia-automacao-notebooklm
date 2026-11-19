@@ -79,10 +79,28 @@ describe("parseFfprobe (saídas reais do ffprobe)", () => {
 });
 
 describe("evaluateCompatibility", () => {
-  it("vertical H.264/AAC de 5s é ok em todas", () => {
+  it("vertical H.264/AAC de 5s (360×640) é ok no Instagram, mas abaixo da resolução mínima do Facebook", () => {
     const c = evaluateCompatibility(parseFfprobe(vertical), "mp4");
-    expect(Object.values(c.platforms).map((p) => p.status)).toEqual(["ok", "ok", "ok", "ok"]);
-    expect(c.rulesVersion).toContain("preliminar");
+    expect(c.platforms.instagram_reels.status).toBe("ok");
+    expect(c.platforms.facebook_reels.status).toBe("error");
+    expect(c.platforms.facebook_reels.issues.map((i) => i.code)).toEqual(["resolution"]);
+    expect(c.platforms.tiktok.status).toBe("ok");
+    expect(c.platforms.instagram_reels.verified).toBe(true);
+    expect(c.platforms.tiktok.verified).toBe(false);
+  });
+
+  it("1080×1920 de 30 s é ok em todas", () => {
+    const p = { ...parseFfprobe(vertical), width: 1080, height: 1920, durationMs: 30_000 };
+    expect(Object.values(evaluateCompatibility(p, "mp4").platforms).map((x) => x.status)).toEqual(["ok", "ok", "ok", "ok"]);
+  });
+
+  it("limites confirmados da Meta são erro: tamanho, fps, largura, duração", () => {
+    const base = { ...parseFfprobe(vertical), width: 1080, height: 1920, durationMs: 30_000 };
+    expect(evaluateCompatibility(base, "mp4", 301 * MB).platforms.instagram_reels.issues[0]?.code).toBe("too_large");
+    expect(evaluateCompatibility({ ...base, fps: 15 }, "mp4").platforms.instagram_reels.status).toBe("error");
+    expect(evaluateCompatibility({ ...base, width: 2160, height: 3840 }, "mp4").platforms.instagram_reels.issues.map((i) => i.code)).toContain("too_wide");
+    expect(evaluateCompatibility({ ...base, durationMs: 120_000 }, "mp4").platforms.facebook_reels.status).toBe("error");
+    expect(evaluateCompatibility({ ...base, durationMs: 120_000 }, "mp4").platforms.instagram_reels.status).toBe("ok");
   });
   it("WebM VP9 é erro no Instagram/Facebook e ok no TikTok/YouTube", () => {
     const c = evaluateCompatibility(parseFfprobe(vp9), "webm");
@@ -91,19 +109,18 @@ describe("evaluateCompatibility", () => {
     expect(c.platforms.tiktok.status).toBe("ok");
     expect(c.platforms.youtube_shorts.status).toBe("ok");
   });
-  it("horizontal e curto gera apenas avisos (limites preliminares)", () => {
+  it("horizontal de 2 s: erro (duração mínima confirmada) na Meta, aviso no TikTok", () => {
     const c = evaluateCompatibility(parseFfprobe(horizontal), "mp4");
-    expect(c.platforms.instagram_reels.status).toBe("warning");
+    expect(c.platforms.instagram_reels.status).toBe("error");
     const codes = c.platforms.instagram_reels.issues.map((i) => i.code);
     expect(codes).toContain("not_vertical");
     expect(codes).toContain("too_short");
+    expect(c.platforms.tiktok.status).toBe("warning");
   });
-  it("duração longa: aviso de Short no YouTube", () => {
+  it("duração longa: aviso de Short no YouTube (preliminar)", () => {
     const p = { ...parseFfprobe(vertical), durationMs: 200_000 };
     const c = evaluateCompatibility(p, "mp4");
-    expect(c.platforms.youtube_shorts.issues[0]?.code).toBe("too_long");
-    expect(c.platforms.facebook_reels.issues.map((i) => i.code)).toContain("too_long");
-    expect(c.platforms.instagram_reels.status).toBe("ok");
+    expect(c.platforms.youtube_shorts.issues[0]).toMatchObject({ code: "too_long", level: "warning" });
   });
 });
 

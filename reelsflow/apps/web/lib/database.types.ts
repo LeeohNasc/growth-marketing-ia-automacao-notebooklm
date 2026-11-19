@@ -215,6 +215,7 @@ export type Database = {
         id: string; job_id: string; workspace_id: string; social_account_id: string | null; platform: SocialPlatform; external_id: string | null;
         permalink: string | null; published_at: string; source: "api" | "reconciled" | "manual"; created_at: string;
       }>;
+      social_account_capabilities: ReadOnly<{ social_account_id: string; workspace_id: string; capability: string; granted: boolean; details: Json; checked_at: string }>;
       automation_rules: ReadOnly<{ workspace_id: string; rule_key: string; enabled: boolean; params: Json; updated_by: string | null; updated_at: string }>;
       automation_runs: ReadOnly<{
         id: number; workspace_id: string; rule_key: string; subject_type: string; subject_id: string | null; outcome: string; details: Json; dedupe_key: string | null; created_at: string;
@@ -259,6 +260,14 @@ export type Database = {
       reschedule_job: { Args: { p_job: string; p_at: string }; Returns: undefined };
       update_job_caption: { Args: { p_job: string; p_caption: string }; Returns: undefined };
       confirm_job_published: { Args: { p_job: string; p_permalink?: string }; Returns: undefined };
+      begin_oauth: { Args: { p_workspace: string; p_provider: string }; Returns: string };
+      check_oauth_state: { Args: { p_state: string }; Returns: boolean };
+      complete_oauth: { Args: { p_state: string; p_pending: Json }; Returns: string };
+      get_oauth_pending: { Args: { p_state: string }; Returns: Json };
+      finalize_oauth: { Args: { p_state: string; p_keys: string[] }; Returns: number };
+      disconnect_social_account: { Args: { p_account: string }; Returns: undefined };
+      meta_data_deletion: { Args: { p_meta_user_id: string }; Returns: string };
+      data_deletion_status: { Args: { p_code: string }; Returns: { status: string; accounts_removed: number; created_at: string; completed_at: string | null }[] };
       worker_last_seen: { Args: Record<string, never>; Returns: string | null };
       set_automation_rule: { Args: { p_workspace: string; p_rule: string; p_enabled: boolean; p_params?: Json }; Returns: undefined };
       account_deletion_blockers: {

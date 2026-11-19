@@ -1,6 +1,7 @@
 import type pg from "pg";
 import type { ConnectorRegistry } from "@reelsflow/connectors";
 import { appendFromCollections, completeCampaigns, lowContentAlerts } from "./publishing/automations";
+import type { CredentialProvider } from "./publishing/credentials";
 import { executePublication, reconcileUncertain } from "./publishing/execute";
 import { claimPublications, promoteDue, reapPublicationLeases } from "./publishing/scheduler";
 import { handlePurge } from "./handlers/purge";
@@ -37,7 +38,11 @@ export async function runJob(job: MediaJob, deps: HandlerDeps, opts: Pick<Worker
   }
 }
 
-export type WorkerDeps = HandlerDeps & { connectors?: ConnectorRegistry };
+export type WorkerDeps = HandlerDeps & {
+  connectors?: ConnectorRegistry;
+  credentials?: CredentialProvider;
+  mediaUrl?: (storagePath: string) => Promise<string | null>;
+};
 
 /**
  * Um ciclo do worker:
@@ -70,7 +75,15 @@ export async function tick(deps: WorkerDeps, opts: WorkerOptions, state: { lastM
   let processed = jobs.length;
 
   if (deps.connectors) {
-    const pub = { db: deps.db, connectors: deps.connectors, log: deps.log, workerId: opts.workerId, leaseSeconds: opts.leaseSeconds };
+    const pub = {
+      db: deps.db,
+      connectors: deps.connectors,
+      log: deps.log,
+      workerId: opts.workerId,
+      leaseSeconds: opts.leaseSeconds,
+      credentials: deps.credentials,
+      mediaUrl: deps.mediaUrl,
+    };
     await promoteDue(deps.db);
     const claimed = await claimPublications(deps.db, opts.workerId, opts.concurrency, opts.leaseSeconds);
     await Promise.all(claimed.map((c) => executePublication(c, pub)));

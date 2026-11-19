@@ -153,28 +153,65 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
 };
 
 /**
- * REGRAS PRELIMINARES. Valores numéricos NÃO foram confirmados na
- * documentação oficial nesta fase; serão revisados na implementação de cada
- * conector (Fase 4/5). Por isso, divergências de duração/proporção geram
- * apenas AVISO; ERRO só para o que certamente impede a publicação
- * (sem trilha de vídeo, codec/contêiner fora do aceito).
+ * Regras de compatibilidade.
+ * - Instagram Reels e Facebook Reels: valores CONFIRMADOS na documentação
+ *   oficial da Meta (Graph API v27.0, consultada em 2026-11-19) → violações
+ *   são ERRO (a plataforma rejeitaria).
+ * - TikTok e YouTube Shorts: PRELIMINARES (não confirmados) → apenas AVISO,
+ *   exceto contêiner/codec.
  */
-export const COMPATIBILITY_RULES_VERSION = "2026-11-19-preliminar";
+export const COMPATIBILITY_RULES_VERSION = "2026-11-19-meta-v27";
 
 type Spec = {
+  verified: boolean;
   containers: string[];
   videoCodecs: string[];
   audioCodecs: string[];
   minDurationS?: number;
   maxDurationS?: number;
+  maxSizeBytes?: number;
+  minFps?: number;
+  maxFps?: number;
+  maxWidth?: number;
+  minShortSide?: number;
+  minLongSide?: number;
   durationNote?: string;
   verticalRecommended: boolean;
 };
 
+const MB_ = 1024 * 1024;
+
 const SPECS: Record<Platform, Spec> = {
-  instagram_reels: { containers: ["mp4", "mov"], videoCodecs: ["h264", "hevc"], audioCodecs: ["aac"], minDurationS: 3, maxDurationS: 900, verticalRecommended: true },
-  facebook_reels: { containers: ["mp4", "mov"], videoCodecs: ["h264", "hevc"], audioCodecs: ["aac"], minDurationS: 3, maxDurationS: 90, verticalRecommended: true },
+  // ig-user/media "Reel Specifications": MOV/MP4, HEVC/H264, AAC, 23–60 fps, largura máx. 1920, 3 s–15 min, 300 MB.
+  instagram_reels: {
+    verified: true,
+    containers: ["mp4", "mov"],
+    videoCodecs: ["h264", "hevc"],
+    audioCodecs: ["aac"],
+    minDurationS: 3,
+    maxDurationS: 900,
+    maxSizeBytes: 300 * MB_,
+    minFps: 23,
+    maxFps: 60,
+    maxWidth: 1920,
+    verticalRecommended: true,
+  },
+  // Reels Publishing API: .mp4 recomendado, H.264/H.265/VP9/AV1, AAC, 24–60 fps, 3–90 s, mín. 540×960.
+  facebook_reels: {
+    verified: true,
+    containers: ["mp4", "mov"],
+    videoCodecs: ["h264", "hevc", "vp9", "av1"],
+    audioCodecs: ["aac"],
+    minDurationS: 3,
+    maxDurationS: 90,
+    minFps: 24,
+    maxFps: 60,
+    minShortSide: 540,
+    minLongSide: 960,
+    verticalRecommended: true,
+  },
   tiktok: {
+    verified: false,
     containers: ["mp4", "mov", "webm"],
     videoCodecs: ["h264", "hevc", "vp8", "vp9"],
     audioCodecs: ["aac", "mp3", "opus", "vorbis"],
@@ -182,6 +219,7 @@ const SPECS: Record<Platform, Spec> = {
     verticalRecommended: true,
   },
   youtube_shorts: {
+    verified: false,
     containers: ["mp4", "mov", "webm"],
     videoCodecs: ["h264", "hevc", "vp8", "vp9", "av1"],
     audioCodecs: ["aac", "mp3", "opus", "vorbis"],
@@ -192,7 +230,7 @@ const SPECS: Record<Platform, Spec> = {
 };
 
 export type CompatIssue = { level: "error" | "warning"; code: string; message: string };
-export type PlatformCompat = { status: "ok" | "warning" | "error"; issues: CompatIssue[] };
+export type PlatformCompat = { status: "ok" | "warning" | "error"; verified?: boolean; issues: CompatIssue[] };
 export type Compatibility = { rulesVersion: string; platforms: Record<Platform, PlatformCompat> };
 
 /** ffprobe reporta "mov,mp4,m4a,3gp,3g2,mj2" para MP4/MOV; usa-se a extensão original para desambiguar. */
@@ -202,11 +240,13 @@ function containerOf(probe: MediaProbe, ext: string): string {
   return probe.container;
 }
 
-export function evaluateCompatibility(probe: MediaProbe, originalExt: string): Compatibility {
+export function evaluateCompatibility(probe: MediaProbe, originalExt: string, sizeBytes?: number): Compatibility {
   const container = containerOf(probe, originalExt.toLowerCase());
   const platforms = {} as Record<Platform, PlatformCompat>;
   for (const p of PLATFORMS) {
     const spec = SPECS[p];
+    const hard: CompatIssue["level"] = spec.verified ? "error" : "warning";
+    const suffix = spec.verified ? "" : " (limite preliminar)";
     const issues: CompatIssue[] = [];
     if (!spec.containers.includes(container)) {
       issues.push({ level: "error", code: "container", message: `Formato ${container.toUpperCase()} não aceito.` });
@@ -215,24 +255,36 @@ export function evaluateCompatibility(probe: MediaProbe, originalExt: string): C
       issues.push({ level: "error", code: "video_codec", message: `Codec de vídeo ${probe.videoCodec.toUpperCase()} não aceito.` });
     }
     if (probe.audioCodec && !spec.audioCodecs.includes(probe.audioCodec)) {
-      issues.push({ level: "warning", code: "audio_codec", message: `Codec de áudio ${probe.audioCodec.toUpperCase()} pode não ser aceito.` });
+      issues.push({ level: hard, code: "audio_codec", message: `Codec de áudio ${probe.audioCodec.toUpperCase()} não aceito (use AAC).` });
     }
     const secs = probe.durationMs / 1000;
     if (spec.minDurationS && secs < spec.minDurationS) {
-      issues.push({ level: "warning", code: "too_short", message: `Duração abaixo de ${spec.minDurationS}s (limite preliminar).` });
+      issues.push({ level: hard, code: "too_short", message: `Duração abaixo de ${spec.minDurationS}s${suffix}.` });
     }
     if (spec.maxDurationS && secs > spec.maxDurationS) {
-      issues.push({
-        level: "warning",
-        code: "too_long",
-        message: spec.durationNote ?? `Duração acima de ${formatDuration(spec.maxDurationS * 1000)} (limite preliminar).`,
-      });
+      issues.push({ level: hard, code: "too_long", message: spec.durationNote ?? `Duração acima de ${formatDuration(spec.maxDurationS * 1000)}${suffix}.` });
+    }
+    if (spec.maxSizeBytes && sizeBytes && sizeBytes > spec.maxSizeBytes) {
+      issues.push({ level: hard, code: "too_large", message: `Arquivo acima de ${formatBytes(spec.maxSizeBytes)}.` });
+    }
+    if (probe.fps != null && ((spec.minFps && probe.fps < spec.minFps - 0.01) || (spec.maxFps && probe.fps > spec.maxFps + 0.01))) {
+      issues.push({ level: hard, code: "fps", message: `Taxa de quadros ${probe.fps} fora de ${spec.minFps}–${spec.maxFps} fps.` });
+    }
+    if (spec.maxWidth && probe.width > spec.maxWidth) {
+      issues.push({ level: hard, code: "too_wide", message: `Largura acima de ${spec.maxWidth} px.` });
+    }
+    if (spec.minShortSide && spec.minLongSide) {
+      const short = Math.min(probe.width, probe.height);
+      const long = Math.max(probe.width, probe.height);
+      if (short < spec.minShortSide || long < spec.minLongSide) {
+        issues.push({ level: hard, code: "resolution", message: `Resolução abaixo de ${spec.minShortSide}×${spec.minLongSide}.` });
+      }
     }
     if (spec.verticalRecommended && probe.width >= probe.height) {
       issues.push({ level: "warning", code: "not_vertical", message: "Vídeo não vertical; o formato recomendado é 9:16." });
     }
     const status = issues.some((i) => i.level === "error") ? "error" : issues.length ? "warning" : "ok";
-    platforms[p] = { status, issues };
+    platforms[p] = { status, verified: spec.verified, issues };
   }
   return { rulesVersion: COMPATIBILITY_RULES_VERSION, platforms };
 }

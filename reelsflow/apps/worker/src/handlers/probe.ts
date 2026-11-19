@@ -10,6 +10,7 @@ type MediaRow = {
   uploaded_by: string | null;
   name: string;
   storage_path: string;
+  size_bytes: number;
   status: string;
   deleted_at: string | null;
 };
@@ -27,7 +28,7 @@ const PROBE_FAILURE_REASONS: Record<ProbeError["code"], string> = {
 export const handleProbe: Handler = async (job, deps, ctx) => {
   const { db, storage, log } = deps;
   const { rows } = await db.query<MediaRow>(
-    "select id, workspace_id, uploaded_by, name, storage_path, status, deleted_at from public.media_assets where id = $1",
+    "select id, workspace_id, uploaded_by, name, storage_path, size_bytes::float8 as size_bytes, status, deleted_at from public.media_assets where id = $1",
     [job.media_asset_id],
   );
   const media = rows[0];
@@ -63,7 +64,7 @@ export const handleProbe: Handler = async (job, deps, ctx) => {
     const thumbPath = thumbnailPathFor(media.storage_path);
     await storage.upload(thumbPath, thumbLocal, "image/jpeg");
 
-    const compat = evaluateCompatibility(probe, ext);
+    const compat = evaluateCompatibility(probe, ext, Number(media.size_bytes));
     await db.query(
       `update public.media_assets
           set status = 'ready', failure_reason = null, duration_ms = $2, width = $3, height = $4, rotation = $5, fps = $6,

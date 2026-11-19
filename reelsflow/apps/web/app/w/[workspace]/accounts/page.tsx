@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { CONNECTOR_AVAILABILITY } from "@reelsflow/connectors";
 import { can, SOCIAL_PLATFORM_LABELS, type SocialPlatform } from "@reelsflow/domain";
+import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { metaConfig } from "@/lib/meta";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireWorkspace } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
@@ -9,13 +12,27 @@ import { AccountRow, CreateSimulatedForm } from "./accounts-client";
 
 export const metadata: Metadata = { title: "Contas Conectadas" };
 
-const REAL: SocialPlatform[] = ["instagram", "facebook", "tiktok", "youtube"];
+const BLOCKED: SocialPlatform[] = ["tiktok", "youtube"];
 
-export default async function AccountsPage({ params }: { params: Promise<{ workspace: string }> }) {
+const NOTICES: Record<string, { text: string; ok?: boolean }> = {
+  not_configured: { text: "A integração com a Meta não está configurada neste ambiente (META_APP_ID, META_APP_SECRET e TOKEN_ENCRYPTION_KEY)." },
+  denied: { text: "A autorização foi cancelada ou recusada na Meta." },
+  invalid_state: { text: "A sessão de conexão expirou ou já foi usada. Tente novamente." },
+  error: { text: "Não foi possível concluir a conexão com a Meta. Tente novamente em instantes." },
+  forbidden: { text: "Somente administradores podem conectar contas." },
+};
+
+export default async function AccountsPage({ params, searchParams }: { params: Promise<{ workspace: string }>; searchParams: Promise<{ meta?: string; connected?: string }> }) {
   const { workspace: slug } = await params;
+  const sp = await searchParams;
   const { workspace, role } = await requireWorkspace(slug);
   const supabase = await createClient();
-  const { data: accounts } = await supabase.from("social_accounts").select("*").eq("workspace_id", workspace.id).order("created_at");
+  const [{ data: accounts }, { data: caps }] = await Promise.all([
+    supabase.from("social_accounts").select("*").eq("workspace_id", workspace.id).order("created_at"),
+    supabase.from("social_account_capabilities").select("social_account_id, capability, granted").eq("workspace_id", workspace.id),
+  ]);
+  const metaEnabled = metaConfig() !== null;
+  const notice = sp.meta ? NOTICES[sp.meta] : undefined;
   const canManage = can(role, "editWorkspaceSettings");
   const simulated = process.env.ENABLE_SIMULATED_ACCOUNTS !== "false";
 
@@ -25,6 +42,33 @@ export default async function AccountsPage({ params }: { params: Promise<{ works
         <h1 className="text-2xl font-semibold tracking-tight">Contas Conectadas</h1>
         <p className="text-sm text-muted-foreground">Conexões apenas por OAuth oficial. O ReelsFlow nunca pede a senha das suas redes.</p>
       </div>
+
+      {notice && <Alert variant="destructive">{notice.text}</Alert>}
+      {sp.connected && <Alert variant="success">{sp.connected} conta(s) conectada(s).</Alert>}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex flex-wrap items-center justify-between gap-2">
+            Instagram e Facebook
+            <Badge variant={metaEnabled ? "secondary" : "outline"}>{metaEnabled ? "Configurado" : "Não configurado"}</Badge>
+          </CardTitle>
+          <CardDescription>
+            Conexão pelo Facebook Login: Páginas do Facebook e contas profissionais do Instagram vinculadas a elas. Enquanto o app não tiver
+            aprovação da Meta (App Review), somente pessoas com papel no app conseguem conectar e publicar.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {metaEnabled && canManage ? (
+            <Button asChild>
+              <a href={`/api/oauth/meta/start?w=${slug}`}>Conectar Instagram ou Facebook</a>
+            </Button>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {metaEnabled ? "Somente administradores podem conectar contas." : "Configure o app Meta no servidor para habilitar a conexão."}
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -41,6 +85,7 @@ export default async function AccountsPage({ params }: { params: Promise<{ works
                   key={a.id}
                   slug={slug}
                   canManage={canManage}
+                  metaEnabled={metaEnabled}
                   acc={{
                     id: a.id,
                     display_name: a.display_name,
@@ -49,6 +94,7 @@ export default async function AccountsPage({ params }: { params: Promise<{ works
                     paused: a.paused,
                     min_spacing_minutes: a.min_spacing_minutes,
                     behavior: ((a.settings as { mock_behavior?: string }) ?? {}).mock_behavior ?? null,
+                    capabilities: (caps ?? []).filter((c) => c.social_account_id === a.id).map((c) => ({ capability: c.capability, granted: c.granted })),
                   }}
                 />
               ))}
@@ -58,7 +104,7 @@ export default async function AccountsPage({ params }: { params: Promise<{ works
       </Card>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        {REAL.map((p) => (
+        {BLOCKED.map((p) => (
           <Card key={p}>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center justify-between text-base">

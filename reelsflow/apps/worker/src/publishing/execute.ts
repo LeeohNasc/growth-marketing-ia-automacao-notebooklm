@@ -2,10 +2,20 @@ import type pg from "pg";
 import { ConnectorError, toConnectorError, type ConnectorRegistry, type Phase, type PublishConnector } from "@reelsflow/connectors";
 import { composeCaption, publicationBackoffSeconds, resolveContent } from "@reelsflow/domain";
 import type { Logger } from "../log";
+import type { CredentialProvider } from "./credentials";
 import type { ClaimedPublication } from "./scheduler";
 import { getRule, notify, recordRun, workspaceAdmins } from "./rules";
 
-export type PublishDeps = { db: pg.Pool; connectors: ConnectorRegistry; log: Logger; workerId: string; leaseSeconds: number };
+export type PublishDeps = {
+  db: pg.Pool;
+  connectors: ConnectorRegistry;
+  log: Logger;
+  workerId: string;
+  leaseSeconds: number;
+  credentials?: CredentialProvider;
+  /** URL temporária e pública do vídeo (a Meta baixa o arquivo por ela). */
+  mediaUrl?: (storagePath: string) => Promise<string | null>;
+};
 
 class LeaseLost extends Error {}
 
@@ -128,6 +138,8 @@ async function executeInner(claimed: ClaimedPublication, deps: PublishDeps): Pro
   let connector: PublishConnector | undefined;
   try {
     connector = deps.connectors.get(ctx.account.platform);
+    const credentials = (await deps.credentials?.get(ctx.account)) ?? null;
+    const mediaUrl = ctx.account.platform === "mock" ? null : ((await deps.mediaUrl?.(ctx.media.storage_path)) ?? null);
     const io = {
       save: async (p: Phase, cp: Record<string, unknown>) => {
         // Persistido ANTES do efeito externo correspondente.
@@ -141,9 +153,10 @@ async function executeInner(claimed: ClaimedPublication, deps: PublishDeps): Pro
         jobId: claimed.id,
         attemptNo: claimed.attempt_count,
         account: { id: ctx.account.id, platform: ctx.account.platform, externalAccountId: ctx.account.external_account_id, settings: ctx.account.settings },
-        media: { storagePath: ctx.media.storage_path, mimeType: ctx.media.mime_type, sizeBytes: ctx.media.size_bytes, durationMs: ctx.media.duration_ms },
+        media: { storagePath: ctx.media.storage_path, mimeType: ctx.media.mime_type, sizeBytes: ctx.media.size_bytes, durationMs: ctx.media.duration_ms, url: mediaUrl },
         caption: composed.text,
         checkpoint,
+        credentials,
       },
       io,
     );
@@ -290,6 +303,7 @@ export async function reconcileUncertain(deps: Omit<PublishDeps, "leaseSeconds">
         ? await deps.connectors.get(ctx.account.platform).getStatus(
             { id: ctx.account.id, platform: ctx.account.platform, externalAccountId: ctx.account.external_account_id, settings: ctx.account.settings },
             j.external_checkpoint,
+            (await deps.credentials?.get(ctx.account)) ?? null,
           )
         : ({ state: "not_found" } as const);
       state = status.state;

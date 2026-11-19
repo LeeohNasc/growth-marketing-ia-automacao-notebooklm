@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input, NativeSelect } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { initialActionState } from "@/lib/action-state";
-import { createSimulatedAccountAction, deleteAccountAction, updateAccountAction } from "./actions";
+import { createSimulatedAccountAction, deleteAccountAction, disconnectAccountAction, updateAccountAction } from "./actions";
 
 export function CreateSimulatedForm({ slug }: { slug: string }) {
   const [state, action] = useActionState(createSimulatedAccountAction, initialActionState);
@@ -34,9 +34,20 @@ export function CreateSimulatedForm({ slug }: { slug: string }) {
   );
 }
 
-type Acc = { id: string; display_name: string; platform: string; status: string; paused: boolean; min_spacing_minutes: number; behavior: string | null };
+type Acc = {
+  id: string;
+  display_name: string;
+  platform: string;
+  status: string;
+  paused: boolean;
+  min_spacing_minutes: number;
+  behavior: string | null;
+  capabilities: { capability: string; granted: boolean }[];
+};
 
-export function AccountRow({ slug, acc, canManage }: { slug: string; acc: Acc; canManage: boolean }) {
+const PLATFORM_NAME: Record<string, string> = { instagram: "Instagram", facebook: "Página do Facebook", mock: "Simulada", tiktok: "TikTok", youtube: "YouTube" };
+
+export function AccountRow({ slug, acc, canManage, metaEnabled }: { slug: string; acc: Acc; canManage: boolean; metaEnabled: boolean }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
@@ -50,10 +61,39 @@ export function AccountRow({ slug, acc, canManage }: { slug: string; acc: Acc; c
     <li className="grid gap-3 px-4 py-4 text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium">{acc.display_name}</span>
-        {acc.platform === "mock" && <Badge variant="warning">Simulada</Badge>}
+        <Badge variant={acc.platform === "mock" ? "warning" : "secondary"}>{PLATFORM_NAME[acc.platform] ?? acc.platform}</Badge>
         {acc.status === "needs_reauth" && <Badge variant="outline" className="border-destructive text-destructive">Requer reconexão</Badge>}
+        {acc.status === "disconnected" && <Badge variant="outline">Desconectada</Badge>}
         {acc.paused && <Badge variant="secondary">Pausada</Badge>}
       </div>
+      {acc.capabilities.length > 0 && (
+        <ul className="flex flex-wrap gap-1 text-xs" aria-label="Permissões">
+          {acc.capabilities.map((c) => (
+            <li key={c.capability} className={c.granted ? "rounded bg-success/10 px-1.5 py-0.5 text-success" : "rounded bg-destructive/10 px-1.5 py-0.5 text-destructive"}>
+              {c.granted ? "✓" : "✗"} {c.capability}
+            </li>
+          ))}
+        </ul>
+      )}
+      {canManage && acc.platform !== "mock" && (
+        <div className="flex flex-wrap gap-2">
+          {metaEnabled && (acc.status !== "active" || acc.capabilities.some((c) => !c.granted)) && (
+            <Button asChild size="sm">
+              <a href={`/api/oauth/meta/start?w=${slug}&rerequest=1`}>Reconectar</a>
+            </Button>
+          )}
+          {acc.status !== "disconnected" && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={pending}
+              onClick={() => window.confirm(`Desconectar ${acc.display_name}? As credenciais serão apagadas; publicações futuras aguardarão a reconexão.`) && run(() => disconnectAccountAction(slug, acc.id))}
+            >
+              Desconectar
+            </Button>
+          )}
+        </div>
+      )}
       {canManage && (
         <div className="flex flex-wrap items-end gap-3">
           <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => updateAccountAction(slug, acc.id, { paused: !acc.paused }))}>

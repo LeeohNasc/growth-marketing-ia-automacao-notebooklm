@@ -9,11 +9,13 @@ import { listMyWorkspaces, requireUser } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Workspaces" };
 
-export default async function WorkspacesPage() {
+export default async function WorkspacesPage({ searchParams }: { searchParams: Promise<{ meta?: string }> }) {
+  const { meta } = await searchParams;
   const user = await requireUser();
   const workspaces = await listMyWorkspaces(user.id);
   if (workspaces.length === 0) redirect("/onboarding");
-  if (workspaces.length === 1) redirect(`/w/${workspaces[0]!.slug}/overview`);
+  const metaNotice = meta && /^[a-z_]{1,32}$/.test(meta) ? `?meta=${meta}` : "";
+  if (workspaces.length === 1) redirect(metaNotice ? `/w/${workspaces[0]!.slug}/accounts${metaNotice}` : `/w/${workspaces[0]!.slug}/overview`);
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -26,7 +28,7 @@ export default async function WorkspacesPage() {
           {workspaces.map((w) => (
             <li key={w.id}>
               <Link
-                href={`/w/${w.slug}/overview`}
+                href={metaNotice ? `/w/${w.slug}/accounts${metaNotice}` : `/w/${w.slug}/overview`}
                 className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <span className="grid size-8 place-items-center rounded bg-secondary text-sm font-semibold uppercase">{w.name.slice(0, 1)}</span>

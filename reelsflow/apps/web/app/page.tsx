@@ -55,6 +55,14 @@ export default function HomePage() {
           ))}
         </ul>
       </main>
+      <footer className="mx-auto flex w-full max-w-6xl gap-4 px-4 py-6 text-sm text-muted-foreground sm:px-6">
+        <a href="/privacy" className="hover:underline">
+          Privacidade
+        </a>
+        <a href="/terms" className="hover:underline">
+          Termos
+        </a>
+      </footer>
     </div>
   );
 }

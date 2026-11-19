@@ -1,5 +1,7 @@
 import pg from "pg";
 import { ConnectorRegistry, MockConnector } from "@reelsflow/connectors";
+import { FacebookConnector, GraphClient, InstagramConnector, TokenCipher } from "@reelsflow/connectors/server";
+import { PgCredentialProvider } from "./publishing/credentials";
 import { PgMockStore } from "./publishing/store";
 import { loadConfig } from "./config";
 import { createLogger } from "./log";
@@ -11,8 +13,20 @@ const log = createLogger({ service: "reelsflow-worker", worker_id: config.WORKER
 const db = new pg.Pool({ connectionString: config.DATABASE_URL, max: config.WORKER_CONCURRENCY + 2 });
 const storage = new SupabaseStorage(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_KEY);
 const controller = new AbortController();
-// Fase 3: apenas o conector simulado. Conectores reais entram na Fase 4.
-const connectors = new ConnectorRegistry().register(new MockConnector(new PgMockStore(db)));
+const graph = new GraphClient({ version: process.env.META_GRAPH_VERSION });
+const connectors = new ConnectorRegistry()
+  .register(new MockConnector(new PgMockStore(db)))
+  .register(new InstagramConnector(graph))
+  .register(new FacebookConnector(graph));
+let cipher: TokenCipher | null = null;
+try {
+  cipher = TokenCipher.fromEnv();
+} catch (e) {
+  log.warn("token cipher not configured; real publications will wait", { error: String(e) });
+}
+const credentials = new PgCredentialProvider(db, cipher);
+// 2 h: tempo para a Meta baixar e processar o vídeo; a URL expira depois.
+const mediaUrl = (p: string) => storage.signedUrl(p, 2 * 3600);
 
 for (const sig of ["SIGINT", "SIGTERM"] as const) {
   process.on(sig, () => {
@@ -23,7 +37,7 @@ for (const sig of ["SIGINT", "SIGTERM"] as const) {
 
 log.info("worker started", { concurrency: config.WORKER_CONCURRENCY });
 await runLoop(
-  { db, storage, log, connectors, ffmpeg: { ffprobe: config.FFPROBE_PATH, ffmpeg: config.FFMPEG_PATH }, tmpDir: config.WORKER_TMP_DIR },
+  { db, storage, log, connectors, credentials, mediaUrl, ffmpeg: { ffprobe: config.FFPROBE_PATH, ffmpeg: config.FFMPEG_PATH }, tmpDir: config.WORKER_TMP_DIR },
   { workerId: config.WORKER_ID, concurrency: config.WORKER_CONCURRENCY, leaseSeconds: config.WORKER_LEASE_SECONDS, pollMs: config.WORKER_POLL_MS },
   controller.signal,
 );

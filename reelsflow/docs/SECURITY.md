@@ -23,6 +23,15 @@ Versão 0.1 · Fase 0
 | Alteração de histórico | `audit_logs` e `publication_attempts` append-only (sem update/delete pelo cliente) |
 | Dependências vulneráveis | `pnpm audit` e Dependabot no CI; versões fixadas |
 
+## 2.1 Implementado na Fase 4 (tokens OAuth)
+- Tokens cifrados com AES-256-GCM no servidor; contexto (AAD) = `<plataforma>:<id externo>` — a cifra não pode ser movida para outra conta.
+- Versão de chave por registro (rotação sem reescrever tudo). Mesma chave no web e no worker; nunca no banco.
+- Tabela de tokens e estados OAuth sem nenhum grant para usuários; testes provam que nem o owner lê.
+- `state` OAuth aleatório (256 bits), amarrado a usuário + workspace, expira em 15 min, uso único, validado ANTES de trocar o code.
+- Token no cabeçalho `Authorization: OAuth …`, nunca na URL; logs do worker redigem tokens e URLs assinadas.
+- Callback de exclusão de dados com verificação HMAC-SHA256 em tempo constante; o id do titular é guardado só como hash.
+- Risco aceito: um admin pode chamar as RPCs de OAuth diretamente e registrar contas falsas no PRÓPRIO workspace (sem token válido elas não publicam).
+
 ## 3. Sessões e autenticação
 - Supabase Auth com cookies httpOnly via `@supabase/ssr`; validação de sessão no servidor com `getUser()` (não confiar apenas no cookie decodificado).
 - Confirmação de e-mail obrigatória antes de conectar contas sociais.

@@ -13,6 +13,8 @@ export interface StorageAdapter {
   /** Lista recursivamente os objetos sob um prefixo (ex.: "{workspace}/"). */
   list(prefix: string): Promise<string[]>;
   exists(objectPath: string): Promise<boolean>;
+  /** URL temporária de leitura (para plataformas baixarem o vídeo). */
+  signedUrl(objectPath: string, expiresInSeconds: number): Promise<string | null>;
 }
 
 export class SupabaseStorage implements StorageAdapter {
@@ -59,6 +61,11 @@ export class SupabaseStorage implements StorageAdapter {
     };
     await walk(prefix.replace(/\/$/, ""));
     return out;
+  }
+
+  async signedUrl(objectPath: string, expiresInSeconds: number) {
+    const { data } = await this.client.storage.from(this.bucket).createSignedUrl(objectPath, expiresInSeconds);
+    return data?.signedUrl ?? null;
   }
 
   async exists(objectPath: string) {
@@ -113,6 +120,10 @@ export class LocalStorage implements StorageAdapter {
     await walk(base);
     return out;
   }
+  async signedUrl(objectPath: string) {
+    return `https://storage.local.invalid/${objectPath}?token=teste`;
+  }
+
   async exists(objectPath: string) {
     try {
       await stat(this.resolve(objectPath));

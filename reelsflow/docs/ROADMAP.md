@@ -31,7 +31,7 @@ Entregáveis: README, PRD, ARCHITECTURE, DATABASE, API_INTEGRATIONS, SECURITY, R
 
 **Critério de saída:** todos os testes de agendamento e publicação simulada da seção 18 do prompt passando, incluindo 2+ workers concorrentes sem duplicidade e recuperação após matar o worker no meio do envio.
 
-## Fase 4 — Integração Meta
+## Fase 4 — Integração Meta ⚠️ código concluído, validação real bloqueada (ver PHASE-4.md)
 - OAuth Meta, seleção de contas IG profissionais e Páginas, capacidades/permissões.
 - Conectores Instagram Reels e Facebook Reels com checkpoints e reconciliação.
 - Criptografia de tokens, refresh, perda de autorização → pausa + notificação.

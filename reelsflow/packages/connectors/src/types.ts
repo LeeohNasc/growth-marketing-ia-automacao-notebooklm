@@ -11,7 +11,9 @@ export type PublishInput = {
   jobId: string;
   attemptNo: number;
   account: { id: string; platform: ConnectorPlatform; externalAccountId: string; settings: Record<string, unknown> };
-  media: { storagePath: string; mimeType: string; sizeBytes: number; durationMs: number | null };
+  media: { storagePath: string; mimeType: string; sizeBytes: number; durationMs: number | null; url?: string | null };
+  /** Credenciais decifradas pelo worker (nunca persistidas em claro). Ausente no conector simulado. */
+  credentials?: { accessToken: string } | null;
   caption: string;
   /** Checkpoint salvo em tentativa anterior (permite continuar sem refazer etapas). */
   checkpoint: Record<string, unknown> | null;
@@ -55,7 +57,7 @@ export class ConnectorError extends Error {
 export interface PublishConnector {
   readonly platform: ConnectorPlatform;
   publish(input: PublishInput, io: CheckpointIO): Promise<PublishResult>;
-  getStatus(account: PublishInput["account"], checkpoint: Record<string, unknown>): Promise<RemoteStatus>;
+  getStatus(account: PublishInput["account"], checkpoint: Record<string, unknown>, credentials?: PublishInput["credentials"]): Promise<RemoteStatus>;
 }
 
 /** Converte erro desconhecido em ConnectorError, preservando se houve efeito externo. */

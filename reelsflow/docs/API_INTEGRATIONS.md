@@ -15,6 +15,20 @@ Proibições permanentes: pedir senhas, usar cookies capturados, automação de 
 | TikTok | Content Posting API (Direct Post) | **Não** até auditoria — apps não auditados só publicam como privado (`SELF_ONLY`) | Auditoria do app pelo TikTok |
 | YouTube Shorts | YouTube Data API v3 (`videos.insert`) | **Não** até auditoria — projetos não verificados criados após 28/07/2020 têm uploads restritos a privado | Verificação OAuth + auditoria de conformidade da API |
 
+## Atualização 2026-11-19 (Fase 4) — fatos lidos na documentação oficial, Graph API v27.0
+
+| Item | Instagram (Facebook Login) | Facebook Reels (Página) |
+|---|---|---|
+| Permissões | instagram_basic, instagram_content_publish, pages_read_engagement (+ ads_management/ads_read se a Página está em Business Manager) | pages_show_list, pages_read_engagement, pages_manage_posts; token de Página de usuário com tarefa CREATE_CONTENT |
+| Limite | **50 publicações / 24 h** (content_publishing_limit e media_publish; a página geral cita 100 — conflito na própria doc); 400 containers / 24 h | **30 Reels / 24 h** por Página |
+| Fluxo | POST /{ig}/media (media_type=REELS, video_url público) → status_code → POST /{ig}/media_publish | POST /{page}/video_reels start → rupload (file_url) → finish (video_state=PUBLISHED) |
+| Status | EXPIRED, ERROR, FINISHED, IN_PROGRESS, PUBLISHED; consultar ~1/min por até 5 min; container expira em 24 h | video_status + fases uploading/processing/publishing; publish_status draft/error/published/scheduled |
+| Idempotência | **Não documentada** para media_publish; doc recomenda consultar o container (PUBLISHED) antes de repetir | Não há chave de idempotência |
+| Especificação | MOV/MP4, H.264/HEVC, AAC, 23–60 fps, largura ≤ 1920, 3 s–15 min, ≤ 300 MB | MP4 recomendado, H.264/H.265/VP9/AV1, AAC, 24–60 fps, ≥ 540×960, 3–90 s |
+| Erros de limite | 4, 17, 32, 613, 80001 (Páginas), 80002 (Instagram); `X-Business-Use-Case-Usage.estimated_time_to_regain_access` | idem |
+
+Não confirmados (best-effort no código): campo `permalink` do IG Media e `permalink_url` do vídeo (não constam nas páginas lidas); token de Página vs. de usuário para o Instagram (a própria doc é inconsistente — o código usa o token de Página).
+
 ## 1. Instagram (Meta)
 
 Fatos (documentação oficial):

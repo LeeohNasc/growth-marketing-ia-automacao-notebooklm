@@ -1,5 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { MOCK_BEHAVIORS } from "@reelsflow/connectors";
 import type { ActionState } from "@/lib/action-state";
 import type { Json } from "@/lib/database.types";
@@ -47,4 +48,25 @@ export async function deleteAccountAction(slug: string, accountId: string) {
   revalidatePath(`/w/${slug}/accounts`);
   if (error) return { ok: false, message: error.message.includes("in progress") ? "Há publicações em andamento nesta conta. Tente novamente em instantes." : "Não foi possível remover." };
   return { ok: true };
+}
+
+export async function finalizeConnectionAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const slug = String(formData.get("slug"));
+  const state = String(formData.get("state"));
+  const keys = formData.getAll("keys").map(String);
+  await requireWorkspace(slug);
+  if (!keys.length) return { message: "Selecione ao menos uma conta." };
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("finalize_oauth", { p_state: state, p_keys: keys });
+  if (error) return { message: "A sessão de conexão expirou ou já foi usada. Inicie a conexão novamente." };
+  revalidatePath(`/w/${slug}/accounts`);
+  redirect(`/w/${slug}/accounts?connected=${data ?? 0}`);
+}
+
+export async function disconnectAccountAction(slug: string, accountId: string) {
+  await requireWorkspace(slug);
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("disconnect_social_account", { p_account: accountId });
+  revalidatePath(`/w/${slug}/accounts`);
+  return error ? { ok: false, message: "Somente administradores podem desconectar contas." } : { ok: true };
 }
