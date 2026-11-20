@@ -1,0 +1,76 @@
+/**
+ * Ponto de entrada do worker como Supabase Edge Function (Deno).
+ * Um "tick" por invocação (disparada a cada minuto pelo pg_cron). Sem ffmpeg:
+ * análise por leitura de faixas do MP4/MOV, miniatura gerada no navegador.
+ *
+ * O driver de banco (postgres.js) é injetado pelo chamador para que o bundle
+ * não dependa de como o runtime resolve pacotes npm.
+ */
+import { ConnectorRegistry, MockConnector } from "@reelsflow/connectors";
+import { FacebookConnector, GraphClient, InstagramConnector, TokenCipher } from "@reelsflow/connectors/server";
+import { POSTGRES_JS_OPTIONS, postgresJsDb } from "./db";
+import { createLogger } from "./log";
+import { PgCredentialProvider } from "./publishing/credentials";
+import { PgMockStore } from "./publishing/store";
+import { SupabaseStorage } from "./storage";
+import { tick, type WorkerOptions } from "./worker";
+
+export type EdgeEnv = {
+  databaseUrl: string;
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  tokenEncryptionKey?: string;
+  graphVersion?: string;
+  /** Simulador de publicação ligado (padrão: sim, enquanto não houver app Meta aprovado). */
+  simulatedAccounts?: boolean;
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type PostgresFactory = (url: string, opts: any) => any;
+
+export async function runEdgeTick(env: EdgeEnv, postgres: PostgresFactory, invocationId: string) {
+  const log = createLogger({ service: "reelsflow-worker-edge", invocation: invocationId }, (l) => console.log(l));
+  const db = postgresJsDb(postgres(env.databaseUrl, { ...POSTGRES_JS_OPTIONS, max: 4 }));
+  const storage = new SupabaseStorage(env.supabaseUrl, env.serviceRoleKey);
+  const graph = new GraphClient({ version: env.graphVersion });
+  const connectors = new ConnectorRegistry().register(new InstagramConnector(graph)).register(new FacebookConnector(graph));
+  if (env.simulatedAccounts !== false) connectors.register(new MockConnector(new PgMockStore(db)));
+  let cipher: TokenCipher | null = null;
+  if (env.tokenEncryptionKey) {
+    try {
+      cipher = TokenCipher.fromEnv({ TOKEN_ENCRYPTION_KEY: env.tokenEncryptionKey });
+    } catch (e) {
+      log.warn("token cipher invalid; real publications will wait", { error: String(e) });
+    }
+  }
+  const opts: WorkerOptions = {
+    workerId: "edge-worker",
+    concurrency: 3,
+    // Lease curto: se a função for encerrada pelo limite de tempo, o reaper devolve o job logo.
+    leaseSeconds: 120,
+    pollMs: 0,
+    maintenanceEveryMs: 0,
+  };
+  const started = Date.now();
+  try {
+    const processed = await tick(
+      {
+        db,
+        storage,
+        log,
+        connectors,
+        credentials: new PgCredentialProvider(db, cipher),
+        mediaUrl: (p) => storage.signedUrl(p, 2 * 3600),
+        ffmpeg: { ffprobe: "ffprobe", ffmpeg: "ffmpeg" },
+        tmpDir: "/tmp",
+        probeMode: "remote",
+      },
+      opts,
+      { lastMaintenance: 0 },
+    );
+    log.info("tick done", { processed, ms: Date.now() - started });
+    return { processed, ms: Date.now() - started };
+  } finally {
+    await db.end();
+  }
+}

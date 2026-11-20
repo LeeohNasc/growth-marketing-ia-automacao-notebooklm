@@ -1,4 +1,4 @@
-import type pg from "pg";
+import type { Db } from "../db";
 
 export type RuleKey = "append_from_collection" | "retry_transient" | "low_content_alert" | "complete_campaign" | "pause_on_auth_loss";
 
@@ -11,7 +11,7 @@ export const RULE_DEFAULTS: Record<RuleKey, { enabled: boolean; params: Record<s
   pause_on_auth_loss: { enabled: true, params: {} },
 };
 
-export async function getRule(db: pg.Pool, workspaceId: string, key: RuleKey) {
+export async function getRule(db: Db, workspaceId: string, key: RuleKey) {
   const r = await db.query<{ enabled: boolean; params: Record<string, number> }>(
     "select enabled, params from public.automation_rules where workspace_id = $1 and rule_key = $2",
     [workspaceId, key],
@@ -22,7 +22,7 @@ export async function getRule(db: pg.Pool, workspaceId: string, key: RuleKey) {
 
 /** Registra execução de regra; `dedupeKey` impede repetir a mesma ação (ex.: 1 alerta por dia). Retorna false se já existia. */
 export async function recordRun(
-  db: pg.Pool,
+  db: Db,
   run: { workspaceId: string; rule: RuleKey; subjectType: string; subjectId: string | null; outcome: string; details?: object; dedupeKey?: string },
 ): Promise<boolean> {
   const r = await db.query(
@@ -33,7 +33,7 @@ export async function recordRun(
   return r.rowCount === 1;
 }
 
-export async function notify(db: pg.Pool, workspaceId: string, userIds: (string | null | undefined)[], type: string, payload: object) {
+export async function notify(db: Db, workspaceId: string, userIds: (string | null | undefined)[], type: string, payload: object) {
   const ids = [...new Set(userIds.filter((u): u is string => Boolean(u)))];
   for (const uid of ids) {
     await db.query(
@@ -44,7 +44,7 @@ export async function notify(db: pg.Pool, workspaceId: string, userIds: (string 
   }
 }
 
-export async function workspaceAdmins(db: pg.Pool, workspaceId: string): Promise<string[]> {
+export async function workspaceAdmins(db: Db, workspaceId: string): Promise<string[]> {
   const r = await db.query<{ user_id: string }>(
     "select user_id from public.workspace_members where workspace_id = $1 and role in ('admin', 'owner')",
     [workspaceId],

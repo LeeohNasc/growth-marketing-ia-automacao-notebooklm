@@ -1,4 +1,4 @@
-import type pg from "pg";
+import type { Db } from "./db";
 
 export type MediaJob = {
   id: string;
@@ -15,7 +15,7 @@ export type MediaJob = {
  * workers concorrentes nunca peguem o mesmo job; o lease define até quando o
  * job é nosso sem heartbeat.
  */
-export async function claimJobs(db: pg.Pool, workerId: string, limit: number, leaseSeconds: number): Promise<MediaJob[]> {
+export async function claimJobs(db: Db, workerId: string, limit: number, leaseSeconds: number): Promise<MediaJob[]> {
   const { rows } = await db.query<MediaJob>(
     `update public.media_jobs j
         set status = 'running', lease_owner = $1, lease_expires_at = now() + make_interval(secs => $3),
@@ -33,7 +33,7 @@ export async function claimJobs(db: pg.Pool, workerId: string, limit: number, le
 }
 
 /** Estende o lease; retorna false se o job não é mais nosso (ex.: reaper o devolveu). */
-export async function heartbeat(db: pg.Pool, jobId: string, workerId: string, leaseSeconds: number): Promise<boolean> {
+export async function heartbeat(db: Db, jobId: string, workerId: string, leaseSeconds: number): Promise<boolean> {
   const r = await db.query(
     `update public.media_jobs set lease_expires_at = now() + make_interval(secs => $3)
       where id = $1 and lease_owner = $2 and status = 'running'`,
@@ -42,7 +42,7 @@ export async function heartbeat(db: pg.Pool, jobId: string, workerId: string, le
   return r.rowCount === 1;
 }
 
-export async function completeJob(db: pg.Pool, jobId: string, workerId: string): Promise<void> {
+export async function completeJob(db: Db, jobId: string, workerId: string): Promise<void> {
   await db.query(
     `update public.media_jobs set status = 'succeeded', lease_owner = null, lease_expires_at = null, last_error = null
       where id = $1 and lease_owner = $2`,
@@ -57,7 +57,7 @@ export function backoffSeconds(attempt: number, random = Math.random): number {
 }
 
 /** Falha: reagenda com backoff ou encerra como `failed` ao esgotar tentativas. Retorna true se foi a falha final. */
-export async function failJob(db: pg.Pool, job: MediaJob, workerId: string, error: string): Promise<boolean> {
+export async function failJob(db: Db, job: MediaJob, workerId: string, error: string): Promise<boolean> {
   const final = job.attempts >= job.max_attempts;
   await db.query(
     `update public.media_jobs
@@ -73,7 +73,7 @@ export async function failJob(db: pg.Pool, job: MediaJob, workerId: string, erro
  * Devolve à fila jobs cujo lease expirou (worker morto/travado). Os handlers
  * de mídia são idempotentes, então reexecutar é seguro.
  */
-export async function reapExpiredLeases(db: pg.Pool): Promise<number> {
+export async function reapExpiredLeases(db: Db): Promise<number> {
   const r = await db.query(
     `update public.media_jobs
         set status = case when attempts >= max_attempts then 'failed' else 'queued' end,

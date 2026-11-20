@@ -1,4 +1,4 @@
-import type pg from "pg";
+import type { Db } from "../db";
 import { notify } from "./rules";
 
 /**
@@ -6,7 +6,7 @@ import { notify } from "./rules";
  * se a publicação passou do horário além de `max_lateness_minutes` da
  * campanha (ex.: worker parado), vai para revisão em vez de sair em rajada.
  */
-export async function promoteDue(db: pg.Pool, prepLeadSeconds = 0): Promise<{ promoted: number; late: number }> {
+export async function promoteDue(db: Db, prepLeadSeconds = 0): Promise<{ promoted: number; late: number }> {
   const late = await db.query<{ id: string; workspace_id: string; created_by: string | null; campaign_name: string }>(
     `update public.publication_jobs j
         set status = 'needs_review', review_reason = 'late'
@@ -51,7 +51,7 @@ export type ClaimedPublication = {
  * - ignora contas pausadas/sem autorização, campanhas pausadas e fila pausada;
  * - SKIP LOCKED: workers concorrentes nunca pegam a mesma publicação.
  */
-export async function claimPublications(db: pg.Pool, workerId: string, limit: number, leaseSeconds: number): Promise<ClaimedPublication[]> {
+export async function claimPublications(db: Db, workerId: string, limit: number, leaseSeconds: number): Promise<ClaimedPublication[]> {
   const r = await db.query<ClaimedPublication>(
     `update public.publication_jobs j
         set status = 'preparing', lease_owner = $1, lease_expires_at = now() + make_interval(secs => $3),
@@ -92,7 +92,7 @@ export async function claimPublications(db: pg.Pool, workerId: string, limit: nu
  * Leases expirados de publicações em andamento: sem checkpoint externo, nada
  * foi enviado → volta à fila; com checkpoint → estado incerto (reconciliar).
  */
-export async function reapPublicationLeases(db: pg.Pool): Promise<{ requeued: number; uncertain: number }> {
+export async function reapPublicationLeases(db: Db): Promise<{ requeued: number; uncertain: number }> {
   const requeued = await db.query(
     `update public.publication_jobs set status = 'queued', lease_owner = null, lease_expires_at = null,
             last_error_class = 'lease_expired'

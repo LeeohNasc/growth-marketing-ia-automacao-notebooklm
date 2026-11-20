@@ -1,9 +1,9 @@
-import type pg from "pg";
+import type { Db } from "../db";
 import type { MockPlatformStore } from "@reelsflow/connectors";
 
 /** Plataforma simulada persistida em Postgres (tabela mock_remote_posts). */
 export class PgMockStore implements MockPlatformStore {
-  constructor(private readonly db: pg.Pool) {}
+  constructor(private readonly db: Db) {}
   async createUpload(accountId: string, uploadRef: string, caption: string) {
     const r = await this.db.query<{ id: string }>(
       `insert into public.mock_remote_posts (social_account_id, upload_ref, caption) values ($1, $2, $3)

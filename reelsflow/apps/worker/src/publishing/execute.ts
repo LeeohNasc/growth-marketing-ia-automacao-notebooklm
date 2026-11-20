@@ -1,4 +1,4 @@
-import type pg from "pg";
+import type { Db } from "../db";
 import { ConnectorError, toConnectorError, type ConnectorRegistry, type Phase, type PublishConnector } from "@reelsflow/connectors";
 import { composeCaption, publicationBackoffSeconds, resolveContent } from "@reelsflow/domain";
 import type { Logger } from "../log";
@@ -7,7 +7,7 @@ import type { ClaimedPublication } from "./scheduler";
 import { getRule, notify, recordRun, workspaceAdmins } from "./rules";
 
 export type PublishDeps = {
-  db: pg.Pool;
+  db: Db;
   connectors: ConnectorRegistry;
   log: Logger;
   workerId: string;
@@ -29,7 +29,7 @@ type Context = {
   workspaceSettings: Record<string, unknown>;
 };
 
-async function loadContext(db: pg.Pool, jobId: string): Promise<Context> {
+async function loadContext(db: Db, jobId: string): Promise<Context> {
   const { rows } = await db.query(
     `select row_to_json(j.*) as job, row_to_json(a.*) as account, row_to_json(m.*) as media, row_to_json(c.*) as campaign,
             row_to_json(t.*) as target, row_to_json(cm.*) as cm, w.settings as workspace_settings
@@ -70,12 +70,12 @@ export function effectiveContent(ctx: Context) {
   return { resolved, composed };
 }
 
-async function transition(db: pg.Pool, jobId: string, workerId: string, set: string, params: unknown[]) {
+async function transition(db: Db, jobId: string, workerId: string, set: string, params: unknown[]) {
   const r = await db.query(`update public.publication_jobs set ${set} where id = $1 and lease_owner = $2`, [jobId, workerId, ...params]);
   if (r.rowCount !== 1) throw new LeaseLost(`lease lost for job ${jobId}`);
 }
 
-async function finishAttempt(db: pg.Pool, attemptId: string, fields: { outcome: string; phase?: string | null; err?: ConnectorError | null; checkpoint?: unknown }) {
+async function finishAttempt(db: Db, attemptId: string, fields: { outcome: string; phase?: string | null; err?: ConnectorError | null; checkpoint?: unknown }) {
   await db.query(
     `update public.publication_attempts
         set finished_at = now(), outcome = $2, phase_reached = coalesce($3, phase_reached), error_class = $4, error_code = $5,
@@ -178,7 +178,7 @@ async function executeInner(claimed: ClaimedPublication, deps: PublishDeps): Pro
 }
 
 async function markPublished(
-  db: pg.Pool,
+  db: Db,
   claimed: Pick<ClaimedPublication, "id" | "workspace_id">,
   ctx: Context,
   externalId: string | null,

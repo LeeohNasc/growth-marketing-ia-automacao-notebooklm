@@ -1,4 +1,4 @@
-import type pg from "pg";
+import type { Db } from "./db";
 import type { ConnectorRegistry } from "@reelsflow/connectors";
 import { appendFromCollections, completeCampaigns, lowContentAlerts } from "./publishing/automations";
 import type { CredentialProvider } from "./publishing/credentials";
@@ -94,7 +94,7 @@ export async function tick(deps: WorkerDeps, opts: WorkerOptions, state: { lastM
 }
 
 /** Loop principal com parada graciosa: termina os jobs em andamento antes de sair. */
-export async function runLoop(deps: WorkerDeps & { db: pg.Pool }, opts: WorkerOptions, signal: AbortSignal) {
+export async function runLoop(deps: WorkerDeps & { db: Db }, opts: WorkerOptions, signal: AbortSignal) {
   const state = { lastMaintenance: 0 };
   while (!signal.aborted) {
     let processed = 0;

@@ -18,10 +18,10 @@ import {
 const MB = 1024 * 1024;
 
 describe("checkUploadFile", () => {
-  it("aceita MP4/MOV/WebM pelo MIME ou pela extensão", () => {
+  it("aceita MP4/MOV pelo MIME ou pela extensão; WebM não", () => {
     expect(checkUploadFile({ name: "a.mp4", size: MB, type: "video/mp4" })).toEqual({ ok: true, mime: "video/mp4" });
     expect(checkUploadFile({ name: "a.MOV", size: MB, type: "" })).toEqual({ ok: true, mime: "video/quicktime" });
-    expect(checkUploadFile({ name: "a.webm", size: MB, type: "video/webm" })).toEqual({ ok: true, mime: "video/webm" });
+    expect(checkUploadFile({ name: "a.webm", size: MB, type: "video/webm" }).ok).toBe(false);
   });
   it("recusa formato, vazio e acima do limite", () => {
     expect(checkUploadFile({ name: "a.avi", size: MB, type: "video/x-msvideo" }).ok).toBe(false);

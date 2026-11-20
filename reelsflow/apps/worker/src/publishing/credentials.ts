@@ -1,4 +1,4 @@
-import type pg from "pg";
+import type { Db } from "../db";
 import { ConnectorError } from "@reelsflow/connectors";
 import type { TokenCipher } from "@reelsflow/connectors/server";
 
@@ -11,7 +11,7 @@ export interface CredentialProvider {
  * Contexto (AAD) da cifra = "<plataforma>:<id externo>", igual ao usado no OAuth.
  */
 export class PgCredentialProvider implements CredentialProvider {
-  constructor(private readonly db: pg.Pool, private readonly cipher: TokenCipher | null) {}
+  constructor(private readonly db: Db, private readonly cipher: TokenCipher | null) {}
 
   async get(account: { id: string; platform: string; external_account_id: string }) {
     if (account.platform === "mock") return null;

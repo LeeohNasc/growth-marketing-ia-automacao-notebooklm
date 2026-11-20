@@ -3,15 +3,15 @@
  * (interpretação do ffprobe e compatibilidade por plataforma).
  */
 
+/** MP4/MOV: os formatos aceitos pelo Instagram e pelo Facebook (e lidos pela análise no servidor). */
 export const ACCEPTED_VIDEO_TYPES = {
   "video/mp4": "mp4",
   "video/quicktime": "mov",
-  "video/webm": "webm",
 } as const;
 
 export type AcceptedMime = keyof typeof ACCEPTED_VIDEO_TYPES;
 
-const EXT_TO_MIME: Record<string, AcceptedMime> = { mp4: "video/mp4", m4v: "video/mp4", mov: "video/quicktime", webm: "video/webm" };
+const EXT_TO_MIME: Record<string, AcceptedMime> = { mp4: "video/mp4", m4v: "video/mp4", mov: "video/quicktime" };
 
 /** Limite padrão por arquivo: 50 MB (limite por arquivo do plano Free do Supabase). */
 export const DEFAULT_MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
@@ -28,7 +28,7 @@ export type FileCheck = { ok: true; mime: AcceptedMime } | { ok: false; reason: 
 export function checkUploadFile(file: { name: string; size: number; type: string }, maxBytes = DEFAULT_MAX_UPLOAD_BYTES): FileCheck {
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
   const mime = (file.type in ACCEPTED_VIDEO_TYPES ? file.type : EXT_TO_MIME[ext]) as AcceptedMime | undefined;
-  if (!mime) return { ok: false, reason: "Formato não suportado. Use MP4, MOV ou WebM." };
+  if (!mime) return { ok: false, reason: "Formato não suportado. Use MP4 ou MOV." };
   if (file.size <= 0) return { ok: false, reason: "Arquivo vazio." };
   if (file.size > maxBytes) return { ok: false, reason: `Arquivo maior que o limite de ${formatBytes(maxBytes)}.` };
   if (file.name.length > 255) return { ok: false, reason: "Nome de arquivo muito longo." };

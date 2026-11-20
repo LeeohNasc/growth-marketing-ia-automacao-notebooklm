@@ -1,8 +1,9 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import pg from "pg";
+import type pg from "pg";
 import { ConnectorRegistry, MockConnector } from "@reelsflow/connectors";
+import { makeDb } from "./db";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { silentLogger } from "../src/log";
 import { appendFromCollections, completeCampaigns, lowContentAlerts } from "../src/publishing/automations";
@@ -12,7 +13,7 @@ import { PgMockStore } from "../src/publishing/store";
 import { LocalStorage } from "../src/storage";
 import { tick, type WorkerDeps } from "../src/worker";
 
-const db = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 10 });
+const db = makeDb(10);
 const tmp = mkdtempSync(path.join(os.tmpdir(), "rf-pub-"));
 const connectors = new ConnectorRegistry().register(new MockConnector(new PgMockStore(db)));
 const deps: WorkerDeps = { db, storage: new LocalStorage(tmp), log: silentLogger, ffmpeg: { ffprobe: "ffprobe", ffmpeg: "ffmpeg" }, tmpDir: tmp, connectors };

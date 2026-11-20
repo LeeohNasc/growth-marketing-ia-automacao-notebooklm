@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import { ProbeError, evaluateCompatibility, parseFfprobe, thumbnailPathFor } from "@reelsflow/domain";
 import { ffprobeJson, makeThumbnail } from "../ffmpeg";
+import { httpRangeReader, probeMp4 } from "../media/mp4";
 import type { Handler } from "./types";
 
 type MediaRow = {
@@ -40,15 +41,22 @@ export const handleProbe: Handler = async (job, deps, ctx) => {
     await db.query("update public.media_assets set status = 'processing' where id = $1", [media.id]);
   }
 
-  const dir = await mkdtemp(path.join(deps.tmpDir, "rf-probe-"));
+  const remote = deps.probeMode === "remote";
+  const dir = remote ? null : await mkdtemp(path.join(deps.tmpDir, "rf-probe-"));
   try {
     const ext = path.extname(media.storage_path).slice(1);
-    const local = path.join(dir, `original.${ext}`);
-    await storage.download(media.storage_path, local);
+    const local = dir ? path.join(dir, `original.${ext}`) : "";
 
     let probe;
     try {
-      probe = parseFfprobe(await ffprobeJson(deps.ffmpeg, local));
+      if (remote) {
+        const url = await storage.signedUrl(media.storage_path, 600);
+        if (!url) throw new Error("URL temporária do vídeo indisponível");
+        probe = await probeMp4(await httpRangeReader(url, deps.fetchImpl));
+      } else {
+        await storage.download(media.storage_path, local);
+        probe = parseFfprobe(await ffprobeJson(deps.ffmpeg, local));
+      }
     } catch (err) {
       // ffprobe falha (código != 0) em arquivos que não são mídia: erro permanente.
       const permanent = err instanceof ProbeError || (err as { code?: unknown }).code === 1;
@@ -59,10 +67,15 @@ export const handleProbe: Handler = async (job, deps, ctx) => {
       return;
     }
 
-    const thumbLocal = path.join(dir, "thumb.jpg");
-    await makeThumbnail(deps.ffmpeg, local, thumbLocal, probe.durationMs);
-    const thumbPath = thumbnailPathFor(media.storage_path);
-    await storage.upload(thumbPath, thumbLocal, "image/jpeg");
+    let thumbPath: string | null = thumbnailPathFor(media.storage_path);
+    if (remote) {
+      // Miniatura enviada pelo navegador no upload; se não houver (ex.: HEVC no Chrome), fica sem.
+      if (!(await storage.exists(thumbPath))) thumbPath = null;
+    } else {
+      const thumbLocal = path.join(dir!, "thumb.jpg");
+      await makeThumbnail(deps.ffmpeg, local, thumbLocal, probe.durationMs);
+      await storage.upload(thumbPath, thumbLocal, "image/jpeg");
+    }
 
     const compat = evaluateCompatibility(probe, ext, Number(media.size_bytes));
     await db.query(
@@ -93,7 +106,7 @@ export const handleProbe: Handler = async (job, deps, ctx) => {
     if (ctx.isFinalAttempt) await markFailed(deps, media, "processing_error");
     throw err;
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    if (dir) await rm(dir, { recursive: true, force: true });
   }
 };
 

@@ -1,4 +1,4 @@
-import type pg from "pg";
+import type { Db } from "../db";
 import { buildPlan, type Compatibility, type PlanTarget, type ScheduleRule, type SocialPlatform } from "@reelsflow/domain";
 import type { Logger } from "../log";
 import { getRule, notify, recordRun } from "./rules";
@@ -23,7 +23,7 @@ const PENDING = "('draft','scheduled','queued','preparing','uploading','processi
  * Regra 1 — campanha vinculada a uma coleção: vídeos novos e prontos da
  * coleção entram automaticamente no fim da fila.
  */
-export async function appendFromCollections(db: pg.Pool, log: Logger, now = new Date()): Promise<number> {
+export async function appendFromCollections(db: Db, log: Logger, now = new Date()): Promise<number> {
   const { rows: campaigns } = await db.query<Campaign>(
     `select id, workspace_id, name, mode, timezone, weekdays, times, start_date::text, end_date::text, source_collection_id, created_by
        from public.campaigns where status = 'active' and source_collection_id is not null`,
@@ -116,7 +116,7 @@ export async function appendFromCollections(db: pg.Pool, log: Logger, now = new 
 }
 
 /** Regra 3 — aviso quando faltar conteúdo agendado para os próximos N dias (1 aviso por dia por campanha). */
-export async function lowContentAlerts(db: pg.Pool, now = new Date()): Promise<number> {
+export async function lowContentAlerts(db: Db, now = new Date()): Promise<number> {
   const { rows } = await db.query<{ id: string; workspace_id: string; name: string; created_by: string | null; end_date: string | null; last_at: Date | null }>(
     `select c.id, c.workspace_id, c.name, c.created_by, c.end_date::text,
             (select max(j.scheduled_at) from public.publication_jobs j where j.campaign_id = c.id and j.status in ('scheduled','queued')) as last_at
@@ -151,7 +151,7 @@ export async function lowContentAlerts(db: pg.Pool, now = new Date()): Promise<n
  * Regra 4 — conclui campanhas sem publicações pendentes e gera resumo.
  * Campanhas alimentadas por coleção sem data final continuam ativas (aguardam vídeos).
  */
-export async function completeCampaigns(db: pg.Pool, now = new Date()): Promise<number> {
+export async function completeCampaigns(db: Db, now = new Date()): Promise<number> {
   const { rows } = await db.query<{ id: string; workspace_id: string; name: string; created_by: string | null }>(
     `select c.id, c.workspace_id, c.name, c.created_by from public.campaigns c
       where c.status = 'active'

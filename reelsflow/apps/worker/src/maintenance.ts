@@ -1,4 +1,4 @@
-import type pg from "pg";
+import type { Db } from "./db";
 import type { Logger } from "./log";
 import type { StorageAdapter } from "./storage";
 
@@ -6,7 +6,7 @@ import type { StorageAdapter } from "./storage";
  * Uploads abandonados (status 'uploading' após a expiração): apaga o registro
  * e agenda remoção do arquivo, caso tenha chegado ao storage.
  */
-export async function expireStaleUploads(db: pg.Pool, storage: StorageAdapter, log: Logger): Promise<number> {
+export async function expireStaleUploads(db: Db, storage: StorageAdapter, log: Logger): Promise<number> {
   const { rows } = await db.query<{ id: string; workspace_id: string; storage_path: string }>(
     `select id, workspace_id, storage_path from public.media_assets
       where status = 'uploading' and upload_expires_at < now()
@@ -26,7 +26,7 @@ export async function expireStaleUploads(db: pg.Pool, storage: StorageAdapter, l
 }
 
 /** Remove do storage os arquivos de workspaces excluídos. */
-export async function processStorageGc(db: pg.Pool, storage: StorageAdapter, log: Logger): Promise<number> {
+export async function processStorageGc(db: Db, storage: StorageAdapter, log: Logger): Promise<number> {
   const { rows } = await db.query<{ id: string; prefix: string }>(
     "select id::text, prefix from public.storage_gc where done_at is null order by created_at limit 10",
   );

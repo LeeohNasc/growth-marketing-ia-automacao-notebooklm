@@ -1,8 +1,8 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, existsSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import pg from "pg";
+import { makeDb } from "./db";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createLogger, silentLogger } from "../src/log";
 import { expireStaleUploads, processStorageGc } from "../src/maintenance";
@@ -11,10 +11,8 @@ import { LocalStorage } from "../src/storage";
 import { runJob, tick } from "../src/worker";
 import type { HandlerDeps } from "../src/handlers/types";
 
-const url = process.env.DATABASE_URL;
-if (!url) throw new Error("DATABASE_URL não definido — use `pnpm test:db` na raiz.");
 
-const db = new pg.Pool({ connectionString: url, max: 6 });
+const db = makeDb(6);
 const root = mkdtempSync(path.join(os.tmpdir(), "rf-storage-"));
 const tmp = mkdtempSync(path.join(os.tmpdir(), "rf-tmp-"));
 const storage = new LocalStorage(root);
@@ -167,6 +165,59 @@ describe("probe", () => {
     expect((await job(j)).status).toBe("succeeded");
     const n = await db.query("select payload from public.notifications where type = 'upload.failed' and payload->>'media_id' = $1", [m.id]);
     expect(n.rowCount).toBe(1);
+  });
+
+  describe("modo remoto (Edge Function: sem ffmpeg, leitura por faixas)", () => {
+    let served = 0;
+    // fetch que atende Range a partir do LocalStorage, como o Storage do Supabase.
+    const rangeFetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input));
+      const file = path.join(root, decodeURIComponent(url.pathname.slice(1)));
+      if (!existsSync(file)) return new Response("not found", { status: 404 });
+      const buf = readFileSync(file);
+      const range = new Headers(init?.headers).get("range");
+      const m = range?.match(/^bytes=(\d+)-(\d+)$/);
+      if (!m) { served += buf.length; return new Response(buf, { status: 200 }); }
+      const start = Number(m[1]);
+      const end = Math.min(Number(m[2]), buf.length - 1);
+      served += end - start + 1;
+      return new Response(buf.subarray(start, end + 1), {
+        status: 206,
+        headers: { "content-range": `bytes ${start}-${end}/${buf.length}` },
+      });
+    }) as typeof fetch;
+    const remote: HandlerDeps = { ...deps, probeMode: "remote", fetchImpl: rangeFetch, tmpDir: "/nao-existe" };
+
+    it("usa a miniatura enviada pelo navegador e lê só o índice do arquivo", async () => {
+      const m = await newMedia({ status: "uploaded" });
+      await storage.upload(m.storagePath, videoFile);
+      await storage.put(`${ws}/${m.id}/thumb.jpg`, "jpeg");
+      served = 0;
+      const j = await enqueue("probe", m.id);
+      await tick(remote, opts, { lastMaintenance: Date.now() });
+      const row = await media(m.id);
+      expect(row).toMatchObject({ status: "ready", width: 360, height: 640, video_codec: "h264", audio_codec: "aac", has_audio: true });
+      expect(row.thumbnail_path).toBe(`${ws}/${m.id}/thumb.jpg`);
+      expect(row.compatibility.platforms.instagram_reels.status).toBe("ok");
+      expect((await job(j)).status).toBe("succeeded");
+      expect(served).toBeLessThan(statSync(videoFile).size);
+    });
+
+    it("sem miniatura do navegador o vídeo fica pronto sem thumbnail", async () => {
+      const m = await newMedia({ status: "uploaded" });
+      await storage.upload(m.storagePath, videoFile);
+      await enqueue("probe", m.id);
+      await tick(remote, opts, { lastMaintenance: Date.now() });
+      expect(await media(m.id)).toMatchObject({ status: "ready", thumbnail_path: null });
+    });
+
+    it("arquivo inválido falha de forma permanente", async () => {
+      const m = await newMedia({ status: "uploaded" });
+      await storage.put(m.storagePath, "isto não é um vídeo, mas tem bytes suficientes para ler caixas");
+      await enqueue("probe", m.id);
+      await tick(remote, opts, { lastMaintenance: Date.now() });
+      expect(await media(m.id)).toMatchObject({ status: "failed", failure_reason: "invalid_video" });
+    });
   });
 
   it("erro transitório reagenda; na última tentativa marca o vídeo como falho", async () => {
