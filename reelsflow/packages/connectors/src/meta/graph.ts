@@ -66,6 +66,15 @@ export function retryAfterFromHeaders(h: Headers): number | null {
   }
 }
 
+/**
+ * JSON.parse que preserva inteiros grandes como string. IDs do Instagram (ex.: 17841400000000001)
+ * passam de Number.MAX_SAFE_INTEGER; se a API os enviar como número, JSON.parse arredondaria
+ * o ID em silêncio e o ReelsFlow guardaria a conta errada.
+ */
+export function parseJsonSafe(text: string): unknown {
+  return JSON.parse(text.replace(/([:\[,]\s*)(-?\d{16,})(?=\s*[,\]}])/g, '$1"$2"'));
+}
+
 export type GraphOptions = { version?: string; fetchImpl?: typeof fetch; timeoutMs?: number };
 
 /** Cliente mínimo da Graph API: versão fixa, timeout, erros estruturados. Tokens nunca vão para logs. */
@@ -83,13 +92,34 @@ export class GraphClient {
     return `https://${host}/${this.version}/${path.replace(/^\//, "")}`;
   }
 
-  async request<T>(method: "GET" | "POST" | "DELETE", path: string, opts: { token?: string; params?: Record<string, string | number | boolean | undefined>; host?: string; headers?: Record<string, string>; rawUrl?: string } = {}): Promise<T> {
-    const url = new URL(opts.rawUrl ?? this.url(path, opts.host));
+  async request<T>(
+    method: "GET" | "POST" | "DELETE",
+    path: string,
+    opts: {
+      token?: string;
+      /**
+       * Como enviar o token. "oauth" (padrão, Facebook Login): cabeçalho "OAuth <token>".
+       * "bearer": cabeçalho "Authorization: Bearer" (exemplos de publicação do Instagram Login).
+       * "query": parâmetro access_token (exemplos de leitura do Instagram Login). Nunca registrado em log.
+       */
+      auth?: "oauth" | "bearer" | "query";
+      params?: Record<string, string | number | boolean | undefined>;
+      host?: string;
+      headers?: Record<string, string>;
+      rawUrl?: string;
+      /** Sem prefixo de versão (endpoints de token do Instagram Login são documentados sem versão). */
+      unversioned?: boolean;
+    } = {},
+  ): Promise<T> {
+    const url = new URL(opts.rawUrl ?? (opts.unversioned ? `https://${opts.host ?? "graph.facebook.com"}/${path.replace(/^\//, "")}` : this.url(path, opts.host)));
     const params = Object.entries(opts.params ?? {}).filter(([, v]) => v !== undefined) as [string, string | number | boolean][];
     const headers: Record<string, string> = { ...(opts.headers ?? {}) };
     let body: string | undefined;
-    // Token no cabeçalho (formato "OAuth <token>", usado na documentação da Meta), nunca na URL.
-    if (opts.token && !headers.Authorization) headers.Authorization = `OAuth ${opts.token}`;
+    const auth = opts.auth ?? "oauth";
+    if (opts.token && !headers.Authorization) {
+      if (auth === "query") params.push(["access_token", opts.token]);
+      else headers.Authorization = `${auth === "bearer" ? "Bearer" : "OAuth"} ${opts.token}`;
+    }
     if (method === "GET" || method === "DELETE") {
       for (const [k, v] of params) url.searchParams.set(k, String(v));
     } else if (params.length) {
@@ -107,7 +137,7 @@ export class GraphClient {
     const text = await res.text();
     let json: unknown = null;
     try {
-      json = text ? JSON.parse(text) : null;
+      json = text ? parseJsonSafe(text) : null;
     } catch {
       /* corpo não-JSON */
     }

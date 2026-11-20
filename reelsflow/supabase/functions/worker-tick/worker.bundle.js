@@ -186,6 +186,9 @@ function retryAfterFromHeaders(h) {
     return null;
   }
 }
+function parseJsonSafe(text) {
+  return JSON.parse(text.replace(/([:\[,]\s*)(-?\d{16,})(?=\s*[,\]}])/g, '$1"$2"'));
+}
 var GraphClient = class {
   version;
   fetchImpl;
@@ -199,11 +202,15 @@ var GraphClient = class {
     return `https://${host}/${this.version}/${path3.replace(/^\//, "")}`;
   }
   async request(method, path3, opts = {}) {
-    const url = new URL(opts.rawUrl ?? this.url(path3, opts.host));
+    const url = new URL(opts.rawUrl ?? (opts.unversioned ? `https://${opts.host ?? "graph.facebook.com"}/${path3.replace(/^\//, "")}` : this.url(path3, opts.host)));
     const params = Object.entries(opts.params ?? {}).filter(([, v]) => v !== void 0);
     const headers = { ...opts.headers ?? {} };
     let body;
-    if (opts.token && !headers.Authorization) headers.Authorization = `OAuth ${opts.token}`;
+    const auth = opts.auth ?? "oauth";
+    if (opts.token && !headers.Authorization) {
+      if (auth === "query") params.push(["access_token", opts.token]);
+      else headers.Authorization = `${auth === "bearer" ? "Bearer" : "OAuth"} ${opts.token}`;
+    }
     if (method === "GET" || method === "DELETE") {
       for (const [k, v] of params) url.searchParams.set(k, String(v));
     } else if (params.length) {
@@ -221,7 +228,7 @@ var GraphClient = class {
     const text = await res.text();
     let json = null;
     try {
-      json = text ? JSON.parse(text) : null;
+      json = text ? parseJsonSafe(text) : null;
     } catch {
     }
     if (!res.ok || json && typeof json === "object" && "error" in json) {
@@ -232,6 +239,40 @@ var GraphClient = class {
   }
 };
 
+// ../../packages/connectors/src/meta/instagram-login.ts
+var INSTAGRAM_GRAPH_HOST = "graph.instagram.com";
+var expiresAt = (seconds) => seconds && seconds > 0 ? new Date(Date.now() + seconds * 1e3) : null;
+async function refreshInstagramToken(graph, token) {
+  const r = await graph.request("GET", "refresh_access_token", {
+    host: INSTAGRAM_GRAPH_HOST,
+    unversioned: true,
+    params: { grant_type: "ig_refresh_token" },
+    token,
+    auth: "query"
+  });
+  return { token: r.access_token, expiresAt: expiresAt(r.expires_in) };
+}
+async function fetchInstagramProfile(graph, token) {
+  const r = await graph.request("GET", "me", {
+    host: INSTAGRAM_GRAPH_HOST,
+    params: { fields: "user_id,username,name,account_type,profile_picture_url" },
+    token,
+    auth: "query"
+  });
+  const me = (Array.isArray(r.data) ? r.data[0] : r) ?? {};
+  const userId = me.user_id ?? me.id;
+  if (userId === void 0 || typeof me.username !== "string") {
+    throw new ConnectorError("permanent", "Resposta inesperada do Instagram ao ler o perfil.", { code: "ig_profile_shape" });
+  }
+  return {
+    userId: String(userId),
+    username: me.username,
+    name: typeof me.name === "string" && me.name.trim() ? me.name : null,
+    avatarUrl: typeof me.profile_picture_url === "string" ? me.profile_picture_url : null,
+    accountType: typeof me.account_type === "string" ? me.account_type : null
+  };
+}
+
 // ../../packages/connectors/src/meta/instagram.ts
 var defaultSleep = (ms) => new Promise((r) => setTimeout(r, ms));
 var InstagramConnector = class {
@@ -239,63 +280,92 @@ var InstagramConnector = class {
     this.graph = graph;
     this.pollIntervalMs = opts.pollIntervalMs ?? 15e3;
     this.pollBudgetMs = opts.pollBudgetMs ?? 5 * 6e4;
+    this.processingDeadlineMs = opts.processingDeadlineMs ?? 30 * 6e4;
     this.sleep = opts.sleep ?? defaultSleep;
+    this.now = opts.now ?? Date.now;
   }
   graph;
   platform = "instagram";
   pollIntervalMs;
   pollBudgetMs;
+  processingDeadlineMs;
   sleep;
+  now;
+  get(path3, token, params) {
+    return this.graph.request("GET", path3, { host: INSTAGRAM_GRAPH_HOST, token, auth: "query", params });
+  }
+  post(path3, token, params) {
+    return this.graph.request("POST", path3, { host: INSTAGRAM_GRAPH_HOST, token, auth: "bearer", params });
+  }
   token(input) {
     const t = input.credentials?.accessToken;
     if (!t) throw new ConnectorError("auth", "Conta sem credenciais. Reconecte a conta.", { code: "missing_token" });
     return t;
   }
-  async containerStatus(id, token) {
-    return this.graph.request("GET", id, { token, params: { fields: "status_code,status" } });
+  containerStatus(id, token) {
+    return this.get(id, token, { fields: "status_code,status" });
+  }
+  /** Garante que o token pertence à conta selecionada: nunca publicar em outra conta. */
+  async assertIdentity(igUser, token) {
+    const r = await this.get("me", token, { fields: "user_id,username" });
+    const me = (Array.isArray(r.data) ? r.data[0] : r) ?? {};
+    const id = me.user_id ?? me.id;
+    if (id === void 0 || String(id) !== igUser) {
+      throw new ConnectorError("permanent", "O token armazenado n\xE3o pertence \xE0 conta de destino. Nada foi publicado; reconecte a conta.", {
+        code: "ig_account_mismatch"
+      });
+    }
   }
   async publish(input, io) {
     const token = this.token(input);
     const igUser = input.account.externalAccountId;
     let containerId = typeof input.checkpoint?.container_id === "string" ? input.checkpoint.container_id : null;
+    let createdAt = typeof input.checkpoint?.container_created_at === "number" ? input.checkpoint.container_created_at : this.now();
     try {
+      await this.assertIdentity(igUser, token);
+      let known = null;
       if (containerId) {
         const st = await this.containerStatus(containerId, token);
-        if (st.status_code === "PUBLISHED") return await this.resolvePublished(igUser, token, input.checkpoint);
+        if (st.status_code === "PUBLISHED") return await this.resolvePublished(igUser, token, input.checkpoint, input.caption);
         if (st.status_code === "EXPIRED" || st.status_code === "ERROR") containerId = null;
+        else known = st;
       }
       if (!containerId) {
-        const quota = await this.graph.request("GET", `${igUser}/content_publishing_limit`, {
-          token,
-          params: { fields: "quota_usage,config" }
+        const quota = await this.get(`${igUser}/content_publishing_limit`, token, {
+          fields: "quota_usage,config"
         });
-        const q = quota.data[0];
-        if (q && q.config && q.quota_usage >= q.config.quota_total) {
-          throw new ConnectorError("rate_limited", `Cota de publica\xE7\xF5es do Instagram atingida (${q.quota_usage}/${q.config.quota_total} em 24 h).`, {
+        const q = quota.data?.[0];
+        if (q?.config?.quota_total !== void 0 && q.quota_usage !== void 0 && q.quota_usage >= q.config.quota_total) {
+          throw new ConnectorError("rate_limited", `Limite de publica\xE7\xF5es do Instagram atingido (${q.quota_usage}/${q.config.quota_total} em 24 h).`, {
             code: "ig_quota",
             retryAfterSeconds: 3600
           });
         }
         if (!input.media.url) throw new ConnectorError("transient", "URL tempor\xE1ria do v\xEDdeo indispon\xEDvel.", { code: "media_url" });
-        const created = await this.graph.request("POST", `${igUser}/media`, {
-          token,
-          params: { media_type: "REELS", video_url: input.media.url, caption: input.caption, share_to_feed: true }
+        const created = await this.post(`${igUser}/media`, token, {
+          media_type: "REELS",
+          video_url: input.media.url,
+          caption: input.caption || void 0,
+          share_to_feed: true
         });
         containerId = created.id;
-        await io.save("processing_remote", { container_id: containerId });
-      } else {
-        await io.save("processing_remote", { container_id: containerId });
+        createdAt = this.now();
       }
-      const deadline = Date.now() + this.pollBudgetMs;
+      await io.save("processing_remote", { container_id: containerId, container_created_at: createdAt });
+      const deadline = this.now() + this.pollBudgetMs;
       for (; ; ) {
-        const st = await this.containerStatus(containerId, token);
+        const st = known ?? await this.containerStatus(containerId, token);
+        known = null;
         if (st.status_code === "FINISHED") break;
-        if (st.status_code === "PUBLISHED") return await this.resolvePublished(igUser, token, { container_id: containerId });
+        if (st.status_code === "PUBLISHED") return await this.resolvePublished(igUser, token, { container_id: containerId }, input.caption);
         if (st.status_code === "ERROR") {
           throw new ConnectorError("permanent", `O Instagram rejeitou o v\xEDdeo no processamento${st.status ? ` (${st.status})` : ""}.`, { code: "ig_container_error" });
         }
         if (st.status_code === "EXPIRED") throw new ConnectorError("transient", "Container expirado; ser\xE1 recriado.", { code: "ig_container_expired" });
-        if (Date.now() >= deadline) {
+        if (this.now() - createdAt > this.processingDeadlineMs) {
+          throw new ConnectorError("permanent", "O Instagram n\xE3o terminou de processar o v\xEDdeo em 30 minutos.", { code: "ig_processing_timeout" });
+        }
+        if (this.now() >= deadline) {
           throw new ConnectorError("transient", "O Instagram ainda est\xE1 processando o v\xEDdeo; nova verifica\xE7\xE3o em instantes.", { code: "ig_processing", retryAfterSeconds: 60 });
         }
         await this.sleep(this.pollIntervalMs);
@@ -303,11 +373,11 @@ var InstagramConnector = class {
     } catch (e) {
       throw classifyMetaError(e, false);
     }
-    const requestedAt = (/* @__PURE__ */ new Date()).toISOString();
-    await io.save("publishing", { container_id: containerId, publish_requested_at: requestedAt });
+    const requestedAt = new Date(this.now()).toISOString();
+    await io.save("publishing", { container_id: containerId, container_created_at: createdAt, publish_requested_at: requestedAt });
     let mediaId;
     try {
-      const r = await this.graph.request("POST", `${igUser}/media_publish`, { token, params: { creation_id: containerId } });
+      const r = await this.post(`${igUser}/media_publish`, token, { creation_id: containerId });
       mediaId = r.id;
     } catch (e) {
       const err = classifyMetaError(e, true);
@@ -318,24 +388,28 @@ var InstagramConnector = class {
     }
     return { externalId: mediaId, permalink: await this.permalink(mediaId, token) };
   }
-  /** `permalink` do IG Media (campo não listado nas páginas de publicação consultadas; best-effort). */
+  /** `permalink` do IG Media ("Permanent URL to the media"). Melhor esforço: o ID já prova a publicação. */
   async permalink(mediaId, token) {
     try {
-      const r = await this.graph.request("GET", mediaId, { token, params: { fields: "permalink" } });
+      const r = await this.get(mediaId, token, { fields: "permalink" });
       return r.permalink ?? null;
     } catch {
       return null;
     }
   }
-  /** Container PUBLISHED: localiza o media publicado entre os mais recentes do perfil. */
-  async resolvePublished(igUser, token, checkpoint) {
+  /**
+   * Container PUBLISHED sem o ID da mídia (falha após media_publish): localiza o Reel entre os
+   * mais recentes do perfil, publicado depois do pedido e, se possível, com a mesma legenda.
+   */
+  async resolvePublished(igUser, token, checkpoint, caption) {
     const since = typeof checkpoint?.publish_requested_at === "string" ? Date.parse(checkpoint.publish_requested_at) - 12e4 : 0;
     try {
-      const r = await this.graph.request("GET", `${igUser}/media`, {
-        token,
-        params: { fields: "id,permalink,timestamp", limit: 10 }
+      const r = await this.get(`${igUser}/media`, token, {
+        fields: "id,permalink,timestamp,caption,media_product_type",
+        limit: 10
       });
-      const hit = r.data.find((m) => !m.timestamp || Date.parse(m.timestamp) >= since);
+      const recent = r.data.filter((m) => (!m.timestamp || Date.parse(m.timestamp) >= since) && (!m.media_product_type || m.media_product_type === "REELS"));
+      const hit = (caption ? recent.find((m) => (m.caption ?? "") === caption) : void 0) ?? (recent.length === 1 ? recent[0] : void 0);
       if (hit) return { externalId: hit.id, permalink: hit.permalink ?? null };
     } catch {
     }
@@ -1379,6 +1453,13 @@ async function handleFailure(claimed, ctx, err, a, deps) {
     });
     return rule2.enabled ? "failed_retryable" : "failed_permanent";
   }
+  if (err.code === "ig_processing") {
+    const delay = Math.max(30, err.retryAfterSeconds ?? 60);
+    await transition(db, claimed.id, workerId, `status = 'failed_retryable', next_attempt_at = now() + make_interval(secs => $5), attempt_count = greatest(attempt_count - 1, 0), ${clear}`, [...base, delay]);
+    await finishAttempt(db, a.attemptId, { outcome: "retry", phase: a.phase, err, checkpoint: a.checkpoint });
+    log.info("publication waiting for remote processing", { job_id: claimed.id, delay_s: delay });
+    return "failed_retryable";
+  }
   const retryable = err.errorClass === "transient" || err.errorClass === "rate_limited" || err.errorClass === "timeout" || err.errorClass === "unknown";
   const rule = await getRule(db, claimed.workspace_id, "retry_transient");
   const maxAttempts = rule.enabled ? Math.min(claimed.max_attempts, Number(rule.params.max_attempts) || claimed.max_attempts) : 1;
@@ -1453,6 +1534,94 @@ async function reconcileUncertain(deps, limit = 20, minAgeSeconds = 30) {
     ]);
   }
   return rows.length;
+}
+
+// src/publishing/tokens.ts
+var REFRESH_WINDOW_DAYS = 15;
+var WARN_WINDOW_DAYS = 7;
+async function notifyOncePerDay(db, workspaceId, type, accountId, payload) {
+  for (const uid of await workspaceAdmins(db, workspaceId)) {
+    await db.query(
+      `insert into public.notifications (workspace_id, user_id, type, payload)
+       select $1, $2, $3, $4::jsonb
+        where not exists (select 1 from public.notifications n
+                           where n.user_id = $2 and n.type = $3 and n.payload ->> 'account_id' = $5 and n.created_at > now() - interval '1 day')`,
+      [workspaceId, uid, type, JSON.stringify({ ...payload, account_id: accountId }), accountId]
+    );
+  }
+}
+async function maintainInstagramTokens(db, deps, limit = 5) {
+  const expired = await db.query(
+    `update public.social_accounts a set status = 'needs_reauth'
+       from public.social_account_tokens t
+      where t.social_account_id = a.id and t.token_type = 'ig_user' and a.status = 'active' and t.expires_at <= now()
+      returning a.id, a.workspace_id, a.display_name`
+  );
+  for (const a of expired.rows) {
+    deps.log.warn("instagram token expired", { account_id: a.id });
+    await notifyOncePerDay(db, a.workspace_id, "account.disconnected", a.id, { account: a.display_name, reason: "token_expired" });
+  }
+  if (!deps.cipher) return { refreshed: 0, failed: 0, expired: expired.rowCount ?? 0 };
+  const due = await db.query(
+    `update public.social_account_tokens t set last_refresh_attempt_at = now()
+       from public.social_accounts a
+      where a.id = t.social_account_id
+        and t.social_account_id in (
+          select t2.social_account_id from public.social_account_tokens t2 join public.social_accounts a2 on a2.id = t2.social_account_id
+           where t2.token_type = 'ig_user' and a2.status = 'active' and t2.expires_at > now()
+             and t2.expires_at < now() + make_interval(days => $1)
+             and t2.issued_at < now() - interval '24 hours'
+             and (t2.last_refresh_attempt_at is null or t2.last_refresh_attempt_at < now() - interval '6 hours')
+           order by t2.expires_at limit $2)
+      returning t.social_account_id, a.workspace_id, a.external_account_id, a.display_name, t.ciphertext, t.iv, t.auth_tag, t.key_version`,
+    [REFRESH_WINDOW_DAYS, limit]
+  );
+  let refreshed = 0;
+  let failed = 0;
+  for (const row of due.rows) {
+    const aad = `instagram:${row.external_account_id}`;
+    try {
+      const current = deps.cipher.open({ ciphertext: row.ciphertext, iv: row.iv, tag: row.auth_tag, keyVersion: row.key_version }, aad);
+      const next = await refreshInstagramToken(deps.graph, current);
+      const profile = await fetchInstagramProfile(deps.graph, next.token);
+      if (profile.userId !== row.external_account_id) throw new Error("token renovado pertence a outra conta");
+      const sealed = deps.cipher.seal(next.token, aad);
+      await db.query(
+        `update public.social_account_tokens
+            set ciphertext = $2, iv = $3, auth_tag = $4, key_version = $5, expires_at = $6, issued_at = now(), last_refresh_error = null
+          where social_account_id = $1`,
+        [row.social_account_id, sealed.ciphertext, sealed.iv, sealed.tag, sealed.keyVersion, next.expiresAt]
+      );
+      await db.query(
+        `update public.social_accounts
+            set token_expires_at = $2, avatar_url = coalesce($3, avatar_url),
+                settings = settings || jsonb_build_object('username', $4::text)
+          where id = $1`,
+        [row.social_account_id, next.expiresAt, profile.avatarUrl, profile.username]
+      );
+      refreshed++;
+      deps.log.info("instagram token refreshed", { account_id: row.social_account_id });
+    } catch (e) {
+      failed++;
+      const err = classifyMetaError(e, false);
+      await db.query("update public.social_account_tokens set last_refresh_error = left($2, 500) where social_account_id = $1", [row.social_account_id, `${err.errorClass}: ${err.message}`]);
+      deps.log.warn("instagram token refresh failed", { account_id: row.social_account_id, error_class: err.errorClass });
+      if (err.errorClass === "auth") {
+        await db.query("update public.social_accounts set status = 'needs_reauth' where id = $1", [row.social_account_id]);
+        await notifyOncePerDay(db, row.workspace_id, "account.disconnected", row.social_account_id, { account: row.display_name, reason: "refresh_denied" });
+      }
+    }
+  }
+  const warn = await db.query(
+    `select a.id, a.workspace_id, a.display_name, t.expires_at
+       from public.social_account_tokens t join public.social_accounts a on a.id = t.social_account_id
+      where t.token_type = 'ig_user' and a.status = 'active' and t.expires_at > now() and t.expires_at < now() + make_interval(days => $1)`,
+    [WARN_WINDOW_DAYS]
+  );
+  for (const a of warn.rows) {
+    await notifyOncePerDay(db, a.workspace_id, "account.token_expiring", a.id, { account: a.display_name, expires_at: a.expires_at });
+  }
+  return { refreshed, failed, expired: expired.rowCount ?? 0 };
 }
 
 // src/publishing/scheduler.ts
@@ -1997,6 +2166,13 @@ async function tick(deps, opts, state) {
       await lowContentAlerts(deps.db);
       await completeCampaigns(deps.db);
     }
+    if (deps.instagramTokens) {
+      try {
+        await maintainInstagramTokens(deps.db, { ...deps.instagramTokens, log: deps.log });
+      } catch (e) {
+        deps.log.error("instagram token maintenance failed", { error: String(e) });
+      }
+    }
     await deps.db.query(
       `insert into public.worker_heartbeats (worker_id, kind, last_seen_at) values ($1, 'worker', now())
        on conflict (worker_id) do update set last_seen_at = now()`,
@@ -2031,7 +2207,7 @@ async function runEdgeTick(env, postgres, invocationId) {
   const db = postgresJsDb(postgres(env.databaseUrl, { ...POSTGRES_JS_OPTIONS, max: 4 }));
   const storage = new SupabaseStorage(env.supabaseUrl, env.serviceRoleKey);
   const graph = new GraphClient({ version: env.graphVersion });
-  const connectors = new ConnectorRegistry().register(new InstagramConnector(graph)).register(new FacebookConnector(graph));
+  const connectors = new ConnectorRegistry().register(new InstagramConnector(graph, { pollIntervalMs: 1e4, pollBudgetMs: 4e4 })).register(new FacebookConnector(graph));
   if (env.simulatedAccounts !== false) connectors.register(new MockConnector(new PgMockStore(db)));
   let cipher = null;
   if (env.tokenEncryptionKey) {
@@ -2058,6 +2234,7 @@ async function runEdgeTick(env, postgres, invocationId) {
         log,
         connectors,
         credentials: new PgCredentialProvider(db, cipher),
+        instagramTokens: { cipher, graph },
         mediaUrl: (p) => storage.signedUrl(p, 2 * 3600),
         ffmpeg: { ffprobe: "ffprobe", ffmpeg: "ffmpeg" },
         tmpDir: "/tmp",

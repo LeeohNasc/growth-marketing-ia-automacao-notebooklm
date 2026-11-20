@@ -9,12 +9,13 @@ import { listMyWorkspaces, requireUser } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Workspaces" };
 
-export default async function WorkspacesPage({ searchParams }: { searchParams: Promise<{ meta?: string }> }) {
-  const { meta } = await searchParams;
+export default async function WorkspacesPage({ searchParams }: { searchParams: Promise<{ meta?: string; ig?: string }> }) {
+  const { meta, ig } = await searchParams;
   const user = await requireUser();
   const workspaces = await listMyWorkspaces(user.id);
   if (workspaces.length === 0) redirect("/onboarding");
-  const metaNotice = meta && /^[a-z_]{1,32}$/.test(meta) ? `?meta=${meta}` : "";
+  // Avisos do retorno do OAuth (Facebook Login: meta; Instagram Login: ig) vão para Contas Conectadas.
+  const metaNotice = meta && /^[a-z_]{1,32}$/.test(meta) ? `?meta=${meta}` : ig && /^[a-z_]{1,32}$/.test(ig) ? `?ig=${ig}` : "";
   if (workspaces.length === 1) redirect(metaNotice ? `/w/${workspaces[0]!.slug}/accounts${metaNotice}` : `/w/${workspaces[0]!.slug}/overview`);
 
   return (

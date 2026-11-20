@@ -6,20 +6,25 @@ import { Button } from "@/components/ui/button";
 import { listJobs } from "@/lib/jobs";
 import { ERROR_CLASS_LABELS } from "@/lib/labels";
 import { requireWorkspace } from "@/lib/session";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Histórico" };
 const PAGE = 50;
 
-export default async function HistoryPage({ params, searchParams }: { params: Promise<{ workspace: string }>; searchParams: Promise<{ page?: string; show?: string }> }) {
+export default async function HistoryPage({ params, searchParams }: { params: Promise<{ workspace: string }>; searchParams: Promise<{ page?: string; show?: string; account?: string }> }) {
   const { workspace: slug } = await params;
   const sp = await searchParams;
   const { workspace } = await requireWorkspace(slug);
   const page = Math.max(1, Number(sp.page) || 1);
   const statuses = sp.show === "failed" ? (["failed_permanent"] as const) : sp.show === "published" ? (["published"] as const) : (["published", "failed_permanent"] as const);
-  const { items, total } = await listJobs(workspace.id, { statuses: [...statuses], order: "desc", limit: PAGE, offset: (page - 1) * PAGE });
+  const supabase = await createClient();
+  const { data: accounts } = await supabase.from("social_accounts").select("id, display_name, platform, settings").eq("workspace_id", workspace.id).order("display_name");
+  const account = accounts?.some((a) => a.id === sp.account) ? sp.account : undefined;
+  const { items, total } = await listJobs(workspace.id, { statuses: [...statuses], account, order: "desc", limit: PAGE, offset: (page - 1) * PAGE });
   const fmt = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: workspace.default_timezone });
   const pages = Math.max(1, Math.ceil(total / PAGE));
-  const link = (patch: Record<string, string>) => `/w/${slug}/history?${new URLSearchParams({ ...(sp.show ? { show: sp.show } : {}), ...patch })}`;
+  const link = (patch: Record<string, string>) =>
+    `/w/${slug}/history?${new URLSearchParams({ ...(sp.show ? { show: sp.show } : {}), ...(account ? { account } : {}), ...patch })}`;
 
   return (
     <div className="mx-auto grid max-w-6xl gap-6">
@@ -28,14 +33,33 @@ export default async function HistoryPage({ params, searchParams }: { params: Pr
           <h1 className="text-2xl font-semibold tracking-tight">Histórico</h1>
           <p className="text-sm text-muted-foreground">Publicações concluídas e falhas definitivas. Registros são mantidos mesmo se o vídeo for excluído.</p>
         </div>
-        <div className="flex gap-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <form action={`/w/${slug}/history`} className="flex items-center gap-2">
+            {sp.show && <input type="hidden" name="show" value={sp.show} />}
+            <label htmlFor="account" className="text-sm text-muted-foreground">
+              Conta
+            </label>
+            <select id="account" name="account" defaultValue={account ?? ""} className="h-9 rounded-md border border-input bg-transparent px-2 text-sm">
+              <option value="">Todas</option>
+              {(accounts ?? []).map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.display_name}
+                  {(a.settings as { username?: string } | null)?.username ? ` (@${(a.settings as { username: string }).username})` : ""} ·{" "}
+                  {SOCIAL_PLATFORM_LABELS[a.platform as SocialPlatform]}
+                </option>
+              ))}
+            </select>
+            <Button type="submit" size="sm" variant="outline">
+              Filtrar
+            </Button>
+          </form>
           {[
             ["", "Tudo"],
             ["published", "Publicadas"],
             ["failed", "Falhas"],
           ].map(([v, l]) => (
             <Button key={v} asChild size="sm" variant={(sp.show ?? "") === v ? "secondary" : "ghost"}>
-              <Link href={`/w/${slug}/history${v ? `?show=${v}` : ""}`}>{l}</Link>
+              <Link href={`/w/${slug}/history?${new URLSearchParams({ ...(v ? { show: v } : {}), ...(account ? { account } : {}) })}`}>{l}</Link>
             </Button>
           ))}
         </div>
@@ -75,8 +99,13 @@ export default async function HistoryPage({ params, searchParams }: { params: Pr
                   <td className="max-w-64 px-3 py-2 text-xs">
                     {j.permalink ? (
                       <a href={j.permalink} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                        {j.externalId ?? "Abrir publicação"}
+                        Abrir publicação
+                        {j.externalId && <span className="block font-mono text-muted-foreground">ID {j.externalId}</span>}
                       </a>
+                    ) : j.externalId ? (
+                      <span className="font-mono" title="Publicado; link não informado pela plataforma">
+                        ID {j.externalId}
+                      </span>
                     ) : j.last_error_class ? (
                       <span title={j.last_error_message ?? ""}>{ERROR_CLASS_LABELS[j.last_error_class] ?? j.last_error_class}{j.last_error_message ? `: ${j.last_error_message}` : ""}</span>
                     ) : (

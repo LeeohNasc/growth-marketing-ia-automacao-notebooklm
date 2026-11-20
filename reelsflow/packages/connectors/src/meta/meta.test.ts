@@ -81,7 +81,7 @@ describe("OAuth", () => {
     const u = new URL(buildAuthUrl(new GraphClient(), cfg, "st4te"));
     expect(u.origin + u.pathname).toBe("https://www.facebook.com/v27.0/dialog/oauth");
     expect(Object.fromEntries(u.searchParams)).toMatchObject({ client_id: "app", redirect_uri: cfg.redirectUri, state: "st4te", response_type: "code" });
-    expect(u.searchParams.get("scope")).toContain("instagram_content_publish");
+    expect(u.searchParams.get("scope")).toBe("pages_show_list,pages_read_engagement,pages_manage_posts");
   });
   it("troca code → token curto → token longo", async () => {
     const g = new FakeGraph().on("GET", "oauth/access_token", { body: { access_token: "short" } }, { body: { access_token: "long", expires_in: 5183944 } });
@@ -91,7 +91,7 @@ describe("OAuth", () => {
     expect(g.calls[0]!.params).toMatchObject({ code: "c0de", redirect_uri: cfg.redirectUri });
     expect(g.calls[1]!.params).toMatchObject({ grant_type: "fb_exchange_token", fb_exchange_token: "short" });
   });
-  it("descobre Páginas e Instagram vinculado, com permissões faltantes", async () => {
+  it("descobre só Páginas (Instagram usa o Instagram Login), com permissões faltantes", async () => {
     const g = new FakeGraph()
       .on("GET", "me", { body: { id: "u1", name: "Ana" } })
       .on("GET", "me/permissions", { body: { data: [{ permission: "pages_show_list", status: "granted" }, { permission: "pages_read_engagement", status: "granted" }, { permission: "pages_manage_posts", status: "granted" }, { permission: "instagram_basic", status: "granted" }, { permission: "instagram_content_publish", status: "declined" }] } })
@@ -100,7 +100,6 @@ describe("OAuth", () => {
     expect(r.metaUserId).toBe("u1");
     expect(r.candidates.map((c) => [c.key, c.canPublish, c.missingScopes])).toEqual([
       ["facebook:p1", true, []],
-      ["instagram:ig1", false, ["instagram_content_publish"]],
       ["facebook:p2", false, []],
     ]);
     expect(g.calls.every((c) => c.headers.Authorization === "OAuth long")).toBe(true);
@@ -123,10 +122,13 @@ function io() {
   return { saved, io: { save: async (p: Phase, c: Record<string, unknown>) => void saved.push([p, c]) } };
 }
 
+/** Instagram Login: GET /me confirma que o token é da conta de destino antes de tudo. */
+const igFake = (userId = "ig1") => new FakeGraph().on("GET", "me", { body: { user_id: userId, username: "loja" } });
+
 describe("InstagramConnector", () => {
   const quotaOk = { body: { data: [{ quota_usage: 3, config: { quota_total: 50, quota_duration: 86400 } }] } };
   it("fluxo completo: cota → container REELS → FINISHED → media_publish → permalink", async () => {
-    const g = new FakeGraph()
+    const g = igFake()
       .on("GET", "ig1/content_publishing_limit", quotaOk)
       .on("POST", "ig1/media", { body: { id: "c1" } })
       .on("GET", "c1", { body: { status_code: "IN_PROGRESS" } }, { body: { status_code: "FINISHED" } })
@@ -143,32 +145,32 @@ describe("InstagramConnector", () => {
   });
 
   it("cota esgotada: rate limit sem criar container", async () => {
-    const g = new FakeGraph().on("GET", "ig1/content_publishing_limit", { body: { data: [{ quota_usage: 50, config: { quota_total: 50 } }] } });
+    const g = igFake().on("GET", "ig1/content_publishing_limit", { body: { data: [{ quota_usage: 50, config: { quota_total: 50 } }] } });
     const err = await new InstagramConnector(new GraphClient({ fetchImpl: g.fetch })).publish(input("instagram", "ig1"), io().io).catch((e) => e);
     expect(err).toMatchObject({ errorClass: "rate_limited", code: "ig_quota" });
     expect(g.count("POST", "ig1/media")).toBe(0);
   });
 
   it("container com ERROR: rejeição permanente, sem publicar", async () => {
-    const g = new FakeGraph().on("GET", "ig1/content_publishing_limit", quotaOk).on("POST", "ig1/media", { body: { id: "c1" } }).on("GET", "c1", { body: { status_code: "ERROR", status: "2207026" } });
+    const g = igFake().on("GET", "ig1/content_publishing_limit", quotaOk).on("POST", "ig1/media", { body: { id: "c1" } }).on("GET", "c1", { body: { status_code: "ERROR", status: "2207026" } });
     const err = await new InstagramConnector(new GraphClient({ fetchImpl: g.fetch }), { sleep: noSleep }).publish(input("instagram", "ig1"), io().io).catch((e) => e);
     expect(err).toMatchObject({ errorClass: "permanent", sideEffectStarted: false });
     expect(g.count("POST", "ig1/media_publish")).toBe(0);
   });
 
   it("processamento lento: falha transitória e retomada pelo checkpoint sem novo container", async () => {
-    const g = new FakeGraph().on("GET", "ig1/content_publishing_limit", quotaOk).on("POST", "ig1/media", { body: { id: "c1" } }).on("GET", "c1", { body: { status_code: "IN_PROGRESS" } });
+    const g = igFake().on("GET", "ig1/content_publishing_limit", quotaOk).on("POST", "ig1/media", { body: { id: "c1" } }).on("GET", "c1", { body: { status_code: "IN_PROGRESS" } });
     const c = new InstagramConnector(new GraphClient({ fetchImpl: g.fetch }), { sleep: noSleep, pollBudgetMs: 0 });
     const { saved, io: sink } = io();
     expect(await c.publish(input("instagram", "ig1"), sink).catch((e) => e)).toMatchObject({ errorClass: "transient", code: "ig_processing" });
-    const g2 = new FakeGraph().on("GET", "c1", { body: { status_code: "FINISHED" } }).on("POST", "ig1/media_publish", { body: { id: "m9" } }).on("GET", "m9", { body: {} });
+    const g2 = igFake().on("GET", "c1", { body: { status_code: "FINISHED" } }).on("POST", "ig1/media_publish", { body: { id: "m9" } }).on("GET", "m9", { body: {} });
     const r = await new InstagramConnector(new GraphClient({ fetchImpl: g2.fetch }), { sleep: noSleep }).publish(input("instagram", "ig1", saved[0]![1]), io().io);
     expect(r.externalId).toBe("m9");
     expect(g2.count("POST", "ig1/media")).toBe(0);
   });
 
   it("timeout no media_publish: incerto; reconciliação pelo container encontra o media", async () => {
-    const g = new FakeGraph()
+    const g = igFake()
       .on("GET", "ig1/content_publishing_limit", quotaOk)
       .on("POST", "ig1/media", { body: { id: "c1" } })
       .on("GET", "c1", { body: { status_code: "FINISHED" } })
@@ -178,22 +180,22 @@ describe("InstagramConnector", () => {
     const err = await c.publish(input("instagram", "ig1"), sink).catch((e) => e);
     expect(err).toMatchObject({ errorClass: "timeout", sideEffectStarted: true });
 
-    const g2 = new FakeGraph().on("GET", "c1", { body: { status_code: "PUBLISHED" } }).on("GET", "ig1/media", { body: { data: [{ id: "m7", permalink: "https://www.instagram.com/reel/x/", timestamp: new Date().toISOString() }] } });
+    const g2 = igFake().on("GET", "c1", { body: { status_code: "PUBLISHED" } }).on("GET", "ig1/media", { body: { data: [{ id: "m7", permalink: "https://www.instagram.com/reel/x/", timestamp: new Date().toISOString() }] } });
     const st = await new InstagramConnector(new GraphClient({ fetchImpl: g2.fetch })).getStatus(account("instagram", "ig1"), saved.at(-1)![1], { accessToken: "t" });
     expect(st).toEqual({ state: "published", externalId: "m7", permalink: "https://www.instagram.com/reel/x/" });
   });
 
   it("limite no media_publish: não publicou (retry seguro); token inválido: auth", async () => {
-    const base = () => new FakeGraph().on("GET", "ig1/content_publishing_limit", quotaOk).on("POST", "ig1/media", { body: { id: "c1" } }).on("GET", "c1", { body: { status_code: "FINISHED" } });
+    const base = () => igFake().on("GET", "ig1/content_publishing_limit", quotaOk).on("POST", "ig1/media", { body: { id: "c1" } }).on("GET", "c1", { body: { status_code: "FINISHED" } });
     const g = base().on("POST", "ig1/media_publish", { status: 400, body: { error: { message: "limit", code: 4 } } });
     expect(await new InstagramConnector(new GraphClient({ fetchImpl: g.fetch })).publish(input("instagram", "ig1"), io().io).catch((e) => e)).toMatchObject({ errorClass: "rate_limited", sideEffectStarted: false });
-    const g2 = new FakeGraph().on("GET", "ig1/content_publishing_limit", { status: 401, body: { error: { message: "Error validating access token", code: 190 } } });
+    const g2 = igFake().on("GET", "ig1/content_publishing_limit", { status: 401, body: { error: { message: "Error validating access token", code: 190 } } });
     expect(await new InstagramConnector(new GraphClient({ fetchImpl: g2.fetch })).publish(input("instagram", "ig1"), io().io).catch((e) => e)).toMatchObject({ errorClass: "auth" });
   });
 
   it("estado do container na reconciliação", async () => {
     const st = async (code: string) =>
-      new InstagramConnector(new GraphClient({ fetchImpl: new FakeGraph().on("GET", "c1", { body: { status_code: code } }).fetch })).getStatus(account("instagram", "ig1"), { container_id: "c1" }, { accessToken: "t" });
+      new InstagramConnector(new GraphClient({ fetchImpl: igFake().on("GET", "c1", { body: { status_code: code } }).fetch })).getStatus(account("instagram", "ig1"), { container_id: "c1" }, { accessToken: "t" });
     expect((await st("IN_PROGRESS")).state).toBe("processing");
     expect((await st("FINISHED")).state).toBe("not_found");
     expect((await st("EXPIRED")).state).toBe("not_found");

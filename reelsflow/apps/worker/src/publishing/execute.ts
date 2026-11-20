@@ -251,6 +251,16 @@ async function handleFailure(
     return rule.enabled ? "failed_retryable" : "failed_permanent";
   }
 
+  // A plataforma ainda processa o vídeo (container criado e salvo no checkpoint): volta em
+  // ~1 min para o MESMO container sem gastar tentativa. O conector impõe o prazo total.
+  if (err.code === "ig_processing") {
+    const delay = Math.max(30, err.retryAfterSeconds ?? 60);
+    await transition(db, claimed.id, workerId, `status = 'failed_retryable', next_attempt_at = now() + make_interval(secs => $5), attempt_count = greatest(attempt_count - 1, 0), ${clear}`, [...base, delay]);
+    await finishAttempt(db, a.attemptId, { outcome: "retry", phase: a.phase, err, checkpoint: a.checkpoint });
+    log.info("publication waiting for remote processing", { job_id: claimed.id, delay_s: delay });
+    return "failed_retryable";
+  }
+
   const retryable = err.errorClass === "transient" || err.errorClass === "rate_limited" || err.errorClass === "timeout" || err.errorClass === "unknown";
   const rule = await getRule(db, claimed.workspace_id, "retry_transient");
   const maxAttempts = rule.enabled ? Math.min(claimed.max_attempts, Number(rule.params.max_attempts) || claimed.max_attempts) : 1;

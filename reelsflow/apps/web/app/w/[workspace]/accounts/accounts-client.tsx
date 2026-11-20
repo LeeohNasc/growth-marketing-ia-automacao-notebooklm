@@ -37,6 +37,9 @@ export function CreateSimulatedForm({ slug }: { slug: string }) {
 type Acc = {
   id: string;
   display_name: string;
+  username: string | null;
+  avatar_url: string | null;
+  token_expires_at: string | null;
   platform: string;
   status: string;
   paused: boolean;
@@ -47,7 +50,9 @@ type Acc = {
 
 const PLATFORM_NAME: Record<string, string> = { instagram: "Instagram", facebook: "Página do Facebook", mock: "Simulada", tiktok: "TikTok", youtube: "YouTube" };
 
-export function AccountRow({ slug, acc, canManage, metaEnabled }: { slug: string; acc: Acc; canManage: boolean; metaEnabled: boolean }) {
+const dateFmt = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
+
+export function AccountRow({ slug, acc, canManage, metaEnabled, igEnabled }: { slug: string; acc: Acc; canManage: boolean; metaEnabled: boolean; igEnabled: boolean }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
@@ -60,12 +65,30 @@ export function AccountRow({ slug, acc, canManage, metaEnabled }: { slug: string
   return (
     <li className="grid gap-3 px-4 py-4 text-sm">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-medium">{acc.display_name}</span>
+        {acc.avatar_url ? (
+          // Foto do perfil vinda do CDN da Meta (URL temporária; atualizada na renovação do token).
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={acc.avatar_url} alt="" width={36} height={36} referrerPolicy="no-referrer" className="size-9 rounded-full border object-cover" />
+        ) : (
+          <span aria-hidden className="grid size-9 place-items-center rounded-full border bg-secondary text-xs font-semibold uppercase">
+            {acc.display_name.replace(/^@/, "").slice(0, 1)}
+          </span>
+        )}
+        <span className="grid">
+          <span className="font-medium">{acc.display_name}</span>
+          {acc.username && <span className="text-xs text-muted-foreground">@{acc.username}</span>}
+        </span>
+        {acc.status === "active" && acc.platform !== "mock" && <Badge variant="success">Conectada</Badge>}
         <Badge variant={acc.platform === "mock" ? "warning" : "secondary"}>{PLATFORM_NAME[acc.platform] ?? acc.platform}</Badge>
         {acc.status === "needs_reauth" && <Badge variant="outline" className="border-destructive text-destructive">Requer reconexão</Badge>}
         {acc.status === "disconnected" && <Badge variant="outline">Desconectada</Badge>}
         {acc.paused && <Badge variant="secondary">Pausada</Badge>}
       </div>
+      {acc.platform === "instagram" && acc.token_expires_at && acc.status === "active" && (
+        <p className="text-xs text-muted-foreground">
+          Autorização válida até {dateFmt.format(new Date(acc.token_expires_at))} · renovada automaticamente antes de vencer.
+        </p>
+      )}
       {acc.capabilities.length > 0 && (
         <ul className="flex flex-wrap gap-1 text-xs" aria-label="Permissões">
           {acc.capabilities.map((c) => (
@@ -77,11 +100,12 @@ export function AccountRow({ slug, acc, canManage, metaEnabled }: { slug: string
       )}
       {canManage && acc.platform !== "mock" && (
         <div className="flex flex-wrap gap-2">
-          {metaEnabled && (acc.status !== "active" || acc.capabilities.some((c) => !c.granted)) && (
-            <Button asChild size="sm">
-              <a href={`/api/oauth/meta/start?w=${slug}&rerequest=1`}>Reconectar</a>
-            </Button>
-          )}
+          {(acc.status !== "active" || acc.capabilities.some((c) => !c.granted)) &&
+            (acc.platform === "instagram" ? igEnabled : metaEnabled) && (
+              <Button asChild size="sm">
+                <a href={acc.platform === "instagram" ? `/api/oauth/instagram/start?w=${slug}` : `/api/oauth/meta/start?w=${slug}&rerequest=1`}>Reconectar</a>
+              </Button>
+            )}
           {acc.status !== "disconnected" && (
             <Button
               size="sm"

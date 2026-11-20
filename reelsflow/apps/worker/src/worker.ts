@@ -3,6 +3,8 @@ import type { ConnectorRegistry } from "@reelsflow/connectors";
 import { appendFromCollections, completeCampaigns, lowContentAlerts } from "./publishing/automations";
 import type { CredentialProvider } from "./publishing/credentials";
 import { executePublication, reconcileUncertain } from "./publishing/execute";
+import { maintainInstagramTokens } from "./publishing/tokens";
+import type { GraphClient, TokenCipher } from "@reelsflow/connectors/server";
 import { claimPublications, promoteDue, reapPublicationLeases } from "./publishing/scheduler";
 import { handlePurge } from "./handlers/purge";
 import { handleProbe } from "./handlers/probe";
@@ -42,6 +44,8 @@ export type WorkerDeps = HandlerDeps & {
   connectors?: ConnectorRegistry;
   credentials?: CredentialProvider;
   mediaUrl?: (storagePath: string) => Promise<string | null>;
+  /** Renovação dos tokens do Instagram Login (60 dias) durante a manutenção. */
+  instagramTokens?: { cipher: TokenCipher | null; graph: GraphClient };
 };
 
 /**
@@ -63,6 +67,13 @@ export async function tick(deps: WorkerDeps, opts: WorkerOptions, state: { lastM
       await appendFromCollections(deps.db, deps.log);
       await lowContentAlerts(deps.db);
       await completeCampaigns(deps.db);
+    }
+    if (deps.instagramTokens) {
+      try {
+        await maintainInstagramTokens(deps.db, { ...deps.instagramTokens, log: deps.log });
+      } catch (e) {
+        deps.log.error("instagram token maintenance failed", { error: String(e) });
+      }
     }
     await deps.db.query(
       `insert into public.worker_heartbeats (worker_id, kind, last_seen_at) values ($1, 'worker', now())

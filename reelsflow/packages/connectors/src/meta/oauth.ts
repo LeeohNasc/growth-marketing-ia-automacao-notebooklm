@@ -1,16 +1,15 @@
 import type { GraphClient } from "./graph";
 
 /**
- * Permissões pedidas no Facebook Login (documentação v27.0):
- * - Páginas/Reels: pages_show_list, pages_read_engagement, pages_manage_posts
- * - Instagram (Facebook Login): instagram_basic, instagram_content_publish (+ pages_read_engagement)
- * Contas ligadas a um Business Manager podem exigir também ads_management/ads_read (não pedido por padrão).
+ * Permissões pedidas no Facebook Login (documentação v27.0) — SOMENTE Páginas do Facebook:
+ * pages_show_list, pages_read_engagement, pages_manage_posts.
+ * Contas do Instagram usam exclusivamente o Instagram Login (instagram-login.ts): um único
+ * caminho por plataforma evita que uma conta receba um token do tipo errado.
  */
-export const META_SCOPES = ["pages_show_list", "pages_read_engagement", "pages_manage_posts", "instagram_basic", "instagram_content_publish"] as const;
+export const META_SCOPES = ["pages_show_list", "pages_read_engagement", "pages_manage_posts"] as const;
 
 export const REQUIRED_SCOPES = {
   facebook: ["pages_show_list", "pages_read_engagement", "pages_manage_posts"],
-  instagram: ["instagram_basic", "instagram_content_publish", "pages_read_engagement"],
 } as const;
 
 export type MetaAppConfig = { appId: string; appSecret: string; redirectUri: string };
@@ -40,8 +39,8 @@ export async function exchangeCode(graph: GraphClient, cfg: MetaAppConfig, code:
 }
 
 export type MetaCandidate = {
-  key: string; // "facebook:<page-id>" | "instagram:<ig-user-id>"
-  platform: "facebook" | "instagram";
+  key: string; // "facebook:<page-id>"
+  platform: "facebook";
   externalId: string;
   name: string;
   avatarUrl: string | null;
@@ -57,12 +56,11 @@ type PagesResponse = {
     name: string;
     access_token: string;
     tasks?: string[];
-    instagram_business_account?: { id: string; username?: string; profile_picture_url?: string };
   }[];
   paging?: { next?: string };
 };
 
-/** Usuário, permissões concedidas e Páginas (com Instagram vinculado) que o usuário administra. */
+/** Usuário, permissões concedidas e Páginas que o usuário administra. */
 export async function discoverAccounts(graph: GraphClient, userToken: string): Promise<{ metaUserId: string; userName: string; granted: string[]; candidates: MetaCandidate[] }> {
   const me = await graph.request<{ id: string; name: string }>("GET", "me", { token: userToken, params: { fields: "id,name" } });
   const perms = await graph.request<{ data: { permission: string; status: string }[] }>("GET", "me/permissions", { token: userToken });
@@ -73,7 +71,7 @@ export async function discoverAccounts(graph: GraphClient, userToken: string): P
   do {
     const r: PagesResponse = await graph.request<PagesResponse>("GET", "me/accounts", {
       token: userToken,
-      params: next ? undefined : { fields: "id,name,access_token,tasks,instagram_business_account{id,username,profile_picture_url}", limit: 100 },
+      params: next ? undefined : { fields: "id,name,access_token,tasks", limit: 100 },
       rawUrl: next,
     });
     pages.push(...r.data);
@@ -86,21 +84,6 @@ export async function discoverAccounts(graph: GraphClient, userToken: string): P
     const canCreate = (p.tasks ?? []).some((t) => t === "CREATE_CONTENT" || t === "MANAGE");
     const fbMissing = missing(REQUIRED_SCOPES.facebook);
     candidates.push({ key: `facebook:${p.id}`, platform: "facebook", externalId: p.id, name: p.name, avatarUrl: null, pageId: p.id, pageToken: p.access_token, canPublish: canCreate && !fbMissing.length, missingScopes: fbMissing });
-    const ig = p.instagram_business_account;
-    if (ig) {
-      const igMissing = missing(REQUIRED_SCOPES.instagram);
-      candidates.push({
-        key: `instagram:${ig.id}`,
-        platform: "instagram",
-        externalId: ig.id,
-        name: ig.username ? `@${ig.username}` : `Instagram de ${p.name}`,
-        avatarUrl: ig.profile_picture_url ?? null,
-        pageId: p.id,
-        pageToken: p.access_token,
-        canPublish: canCreate && !igMissing.length,
-        missingScopes: igMissing,
-      });
-    }
   }
   return { metaUserId: me.id, userName: me.name, granted, candidates };
 }

@@ -12,7 +12,7 @@ import type { TemplateRow } from "@/lib/database.types";
 import { createCampaignAction } from "../actions";
 import { VideoPicker, type PickerVideo } from "../video-picker";
 
-type Account = { id: string; display_name: string; platform: SocialPlatform; status: string; paused: boolean };
+type Account = { id: string; display_name: string; username: string | null; platform: SocialPlatform; status: string; paused: boolean };
 
 export function CampaignWizard(props: {
   slug: string;
@@ -94,6 +94,7 @@ export function CampaignWizard(props: {
                     <label className="flex flex-1 items-center gap-2">
                       <input type="checkbox" name="accounts" value={a.id} className="size-4 accent-[var(--primary)]" />
                       {a.display_name}
+                      {a.username && <span className="text-muted-foreground">@{a.username}</span>}
                       <Badge variant={a.platform === "mock" ? "warning" : "secondary"}>{SOCIAL_PLATFORM_LABELS[a.platform]}</Badge>
                       {(a.paused || a.status !== "active") && <Badge variant="outline">{a.paused ? "Pausada" : "Requer reconexão"}</Badge>}
                     </label>

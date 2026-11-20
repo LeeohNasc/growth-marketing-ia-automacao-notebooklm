@@ -5,3 +5,4 @@ export * from "./meta/oauth";
 export * from "./meta/instagram";
 export * from "./meta/facebook";
 export * from "./meta/signed-request";
+export * from "./meta/instagram-login";

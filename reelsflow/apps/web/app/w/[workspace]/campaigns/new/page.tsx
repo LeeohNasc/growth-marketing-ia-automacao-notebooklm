@@ -13,7 +13,7 @@ export default async function NewCampaignPage({ params }: { params: Promise<{ wo
   const supabase = await createClient();
   const [{ data: templates }, { data: accounts }, { data: videos }, { data: collections }, { data: items }] = await Promise.all([
     supabase.from("publication_templates").select("*").eq("workspace_id", workspace.id).order("name"),
-    supabase.from("social_accounts").select("id, display_name, platform, status, paused").eq("workspace_id", workspace.id).order("display_name"),
+    supabase.from("social_accounts").select("id, display_name, platform, status, paused, settings").eq("workspace_id", workspace.id).order("display_name"),
     supabase
       .from("media_assets")
       .select("id, name, duration_ms, compatibility, thumbnail_path, created_at")
@@ -39,7 +39,7 @@ export default async function NewCampaignPage({ params }: { params: Promise<{ wo
       <CampaignWizard
         slug={slug}
         templates={templates ?? []}
-        accounts={accounts ?? []}
+        accounts={(accounts ?? []).map(({ settings, ...a }) => ({ ...a, username: (settings as { username?: string } | null)?.username ?? null }))}
         videos={(videos ?? []).map((v) => ({ ...v, thumbUrl: v.thumbnail_path ? (thumbs.get(v.thumbnail_path) ?? null) : null }))}
         collections={(collections ?? []).map((c) => ({ ...c, count: counts.get(c.id) ?? 0 }))}
         defaultTimezone={workspace.default_timezone}

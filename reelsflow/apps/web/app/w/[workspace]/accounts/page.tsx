@@ -4,6 +4,7 @@ import { can, SOCIAL_PLATFORM_LABELS, type SocialPlatform } from "@reelsflow/dom
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { instagramConfig } from "@/lib/instagram";
 import { metaConfig } from "@/lib/meta";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireWorkspace } from "@/lib/session";
@@ -22,7 +23,19 @@ const NOTICES: Record<string, { text: string; ok?: boolean }> = {
   forbidden: { text: "Somente administradores podem conectar contas." },
 };
 
-export default async function AccountsPage({ params, searchParams }: { params: Promise<{ workspace: string }>; searchParams: Promise<{ meta?: string; connected?: string }> }) {
+const IG_NOTICES: Record<string, { text: string; ok?: boolean }> = {
+  connected: { text: "Conta do Instagram conectada. Ela já pode ser escolhida como destino nas campanhas.", ok: true },
+  not_configured: { text: "O Instagram Login não está configurado neste ambiente (INSTAGRAM_APP_ID, INSTAGRAM_APP_SECRET e TOKEN_ENCRYPTION_KEY)." },
+  denied: { text: "A autorização foi cancelada ou recusada no Instagram." },
+  invalid_state: { text: "A sessão de conexão expirou ou já foi usada. Tente novamente." },
+  account_mismatch: { text: "O Instagram devolveu dados de outra conta. Nada foi salvo; tente novamente." },
+  missing_scopes: { text: "Conta conectada, mas sem a permissão de publicar conteúdo. Reconecte e mantenha todas as permissões marcadas." },
+  plan_limit: { text: "O plano deste workspace não permite mais contas do Instagram." },
+  error: { text: "Não foi possível concluir a conexão com o Instagram. Verifique se a conta é profissional (Empresa ou Criador de conteúdo) e tente de novo." },
+  forbidden: { text: "Somente administradores podem conectar contas." },
+};
+
+export default async function AccountsPage({ params, searchParams }: { params: Promise<{ workspace: string }>; searchParams: Promise<{ meta?: string; ig?: string; connected?: string }> }) {
   const { workspace: slug } = await params;
   const sp = await searchParams;
   const { workspace, role } = await requireWorkspace(slug);
@@ -32,7 +45,9 @@ export default async function AccountsPage({ params, searchParams }: { params: P
     supabase.from("social_account_capabilities").select("social_account_id, capability, granted").eq("workspace_id", workspace.id),
   ]);
   const metaEnabled = metaConfig() !== null;
+  const igEnabled = instagramConfig() !== null;
   const notice = sp.meta ? NOTICES[sp.meta] : undefined;
+  const igNotice = sp.ig ? IG_NOTICES[sp.ig] : undefined;
   const canManage = can(role, "editWorkspaceSettings");
   const simulated = process.env.ENABLE_SIMULATED_ACCOUNTS !== "false";
 
@@ -44,31 +59,51 @@ export default async function AccountsPage({ params, searchParams }: { params: P
       </div>
 
       {notice && <Alert variant="destructive">{notice.text}</Alert>}
+      {igNotice && <Alert variant={igNotice.ok ? "success" : "destructive"}>{igNotice.text}</Alert>}
       {sp.connected && <Alert variant="success">{sp.connected} conta(s) conectada(s).</Alert>}
 
       <Card>
         <CardHeader>
           <CardTitle className="flex flex-wrap items-center justify-between gap-2">
-            Instagram e Facebook
-            <Badge variant={metaEnabled ? "secondary" : "outline"}>{metaEnabled ? "Configurado" : "Não configurado"}</Badge>
+            Instagram
+            <Badge variant={igEnabled ? "secondary" : "outline"}>{igEnabled ? "Configurado" : "Não configurado"}</Badge>
           </CardTitle>
           <CardDescription>
-            Conexão pelo Facebook Login: Páginas do Facebook e contas profissionais do Instagram vinculadas a elas. Enquanto o app não tiver
-            aprovação da Meta (App Review), somente pessoas com papel no app conseguem conectar e publicar.
+            Conexão pelo login oficial do Instagram (contas profissionais: Empresa ou Criador de conteúdo; não precisa de Página do
+            Facebook). Cada conexão autoriza uma conta: repita para conectar outras. Enquanto o app não tiver aprovação da Meta, só contas
+            adicionadas ao app no painel de desenvolvedores conseguem se conectar.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {metaEnabled && canManage ? (
+          {igEnabled && canManage ? (
             <Button asChild>
-              <a href={`/api/oauth/meta/start?w=${slug}`}>Conectar Instagram ou Facebook</a>
+              <a href={`/api/oauth/instagram/start?w=${slug}`}>Conectar conta do Instagram</a>
             </Button>
           ) : (
             <p className="text-sm text-muted-foreground">
-              {metaEnabled ? "Somente administradores podem conectar contas." : "Configure o app Meta no servidor para habilitar a conexão."}
+              {igEnabled ? "Somente administradores podem conectar contas." : "Configure o Instagram Login no servidor para habilitar a conexão."}
             </p>
           )}
         </CardContent>
       </Card>
+
+      {metaEnabled && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Páginas do Facebook</CardTitle>
+            <CardDescription>Conexão pelo Facebook Login, somente para Páginas do Facebook.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {canManage ? (
+              <Button asChild variant="outline">
+                <a href={`/api/oauth/meta/start?w=${slug}`}>Conectar Página do Facebook</a>
+              </Button>
+            ) : (
+              <p className="text-sm text-muted-foreground">Somente administradores podem conectar contas.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -86,9 +121,13 @@ export default async function AccountsPage({ params, searchParams }: { params: P
                   slug={slug}
                   canManage={canManage}
                   metaEnabled={metaEnabled}
+                  igEnabled={igEnabled}
                   acc={{
                     id: a.id,
                     display_name: a.display_name,
+                    username: ((a.settings as { username?: string }) ?? {}).username ?? null,
+                    avatar_url: a.avatar_url,
+                    token_expires_at: a.token_expires_at,
                     platform: a.platform,
                     status: a.status,
                     paused: a.paused,

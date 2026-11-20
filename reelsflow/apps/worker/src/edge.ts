@@ -33,7 +33,11 @@ export async function runEdgeTick(env: EdgeEnv, postgres: PostgresFactory, invoc
   const db = postgresJsDb(postgres(env.databaseUrl, { ...POSTGRES_JS_OPTIONS, max: 4 }));
   const storage = new SupabaseStorage(env.supabaseUrl, env.serviceRoleKey);
   const graph = new GraphClient({ version: env.graphVersion });
-  const connectors = new ConnectorRegistry().register(new InstagramConnector(graph)).register(new FacebookConnector(graph));
+  // Edge Function tem limite de tempo por execução: espera curta pelo processamento do vídeo;
+  // se a Meta ainda estiver processando, o próximo tick (1 min) retoma o mesmo container.
+  const connectors = new ConnectorRegistry()
+    .register(new InstagramConnector(graph, { pollIntervalMs: 10_000, pollBudgetMs: 40_000 }))
+    .register(new FacebookConnector(graph));
   if (env.simulatedAccounts !== false) connectors.register(new MockConnector(new PgMockStore(db)));
   let cipher: TokenCipher | null = null;
   if (env.tokenEncryptionKey) {
@@ -60,6 +64,7 @@ export async function runEdgeTick(env: EdgeEnv, postgres: PostgresFactory, invoc
         log,
         connectors,
         credentials: new PgCredentialProvider(db, cipher),
+        instagramTokens: { cipher, graph },
         mediaUrl: (p) => storage.signedUrl(p, 2 * 3600),
         ffmpeg: { ffprobe: "ffprobe", ffmpeg: "ffmpeg" },
         tmpDir: "/tmp",

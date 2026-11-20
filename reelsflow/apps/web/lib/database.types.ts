@@ -267,6 +267,7 @@ export type Database = {
       begin_oauth: { Args: { p_workspace: string; p_provider: string }; Returns: string };
       check_oauth_state: { Args: { p_state: string }; Returns: boolean };
       complete_oauth: { Args: { p_state: string; p_pending: Json }; Returns: string };
+      connect_instagram_account: { Args: { p_state: string; p_account: Json }; Returns: string };
       get_oauth_pending: { Args: { p_state: string }; Returns: Json };
       finalize_oauth: { Args: { p_state: string; p_keys: string[] }; Returns: number };
       disconnect_social_account: { Args: { p_account: string }; Returns: undefined };

@@ -37,7 +37,7 @@ for (const sig of ["SIGINT", "SIGTERM"] as const) {
 
 log.info("worker started", { concurrency: config.WORKER_CONCURRENCY });
 await runLoop(
-  { db, storage, log, connectors, credentials, mediaUrl, ffmpeg: { ffprobe: config.FFPROBE_PATH, ffmpeg: config.FFMPEG_PATH }, tmpDir: config.WORKER_TMP_DIR },
+  { db, storage, log, connectors, credentials, mediaUrl, instagramTokens: { cipher, graph }, ffmpeg: { ffprobe: config.FFPROBE_PATH, ffmpeg: config.FFMPEG_PATH }, tmpDir: config.WORKER_TMP_DIR },
   { workerId: config.WORKER_ID, concurrency: config.WORKER_CONCURRENCY, leaseSeconds: config.WORKER_LEASE_SECONDS, pollMs: config.WORKER_POLL_MS },
   controller.signal,
 );
