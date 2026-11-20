@@ -41,13 +41,17 @@ export async function deleteAccountAction(_prev: ActionState, formData: FormData
     };
   }
 
-  const admin = createAdminClient();
-  if (!admin) {
-    return { message: "A exclusão de conta não está configurada neste ambiente (SUPABASE_SERVICE_ROLE_KEY ausente)." };
-  }
   // O banco revalida: a exclusão falha se o usuário ainda for o último owner de um workspace com membros.
-  const { error } = await admin.auth.admin.deleteUser(auth.user.id);
-  if (error) return { message: "Não foi possível excluir a conta. Tente novamente ou contate o suporte." };
+  const admin = createAdminClient();
+  if (admin) {
+    const { error } = await admin.auth.admin.deleteUser(auth.user.id);
+    if (error) return { message: "Não foi possível excluir a conta. Tente novamente ou contate o suporte." };
+  } else {
+    // Sem service role no app web (deploy padrão): a Edge Function "delete-account" faz a exclusão
+    // com a chave injetada pela Supabase, validando o JWT do próprio usuário.
+    const { error } = await supabase.functions.invoke("delete-account", { method: "POST" });
+    if (error) return { message: "Não foi possível excluir a conta. Tente novamente ou contate o suporte." };
+  }
 
   await supabase.auth.signOut();
   redirect("/login?notice=account-deleted");

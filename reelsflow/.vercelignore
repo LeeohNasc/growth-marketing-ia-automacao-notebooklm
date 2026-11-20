@@ -1,0 +1,9 @@
+# Nunca enviar configuração local nem artefatos.
+**/.env
+**/.env.*
+!**/.env.example
+**/node_modules
+**/.next
+**/test-results
+**/playwright-report
+supabase/functions/**/worker.bundle.js

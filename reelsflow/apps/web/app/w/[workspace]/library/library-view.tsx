@@ -642,7 +642,13 @@ function MediaDetail({
 
         <section className="grid gap-1 text-sm">
           <h3 className="font-medium">Histórico de publicações</h3>
-          <p className="text-muted-foreground">Agendamento e publicações chegam na Fase 3.</p>
+          <p className="text-muted-foreground">
+            Publicações agendadas e realizadas ficam no{" "}
+            <Link href={`/w/${slug}/history`} className="underline underline-offset-4">
+              histórico
+            </Link>
+            .
+          </p>
         </section>
 
         {canEdit && (

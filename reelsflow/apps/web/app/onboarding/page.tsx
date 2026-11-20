@@ -8,7 +8,7 @@ import { OnboardingForm } from "./onboarding-form";
 
 export const metadata: Metadata = { title: "Criar workspace" };
 
-const STEPS = ["Criar workspace", "Enviar vídeos (Fase 2)", "Conectar redes sociais (Fase 4)"];
+const STEPS = ["Criar workspace", "Enviar vídeos", "Conectar redes sociais"];
 
 export default async function OnboardingPage() {
   const user = await requireUser();

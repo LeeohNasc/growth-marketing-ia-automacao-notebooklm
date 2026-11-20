@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/client";
 import { publicEnv } from "@/lib/env";
 import { planLimitMessage } from "@/lib/limits-messages";
 import { tusEndpoint } from "@/lib/upload/endpoint";
+import { makeThumbnail } from "@/lib/upload/thumbnail";
 import { sha256File } from "@/lib/upload/hash";
 import { clearPending, findPending, savePending } from "@/lib/upload/resume-store";
 import { cn } from "@/lib/utils";
@@ -51,7 +52,7 @@ function reducer(state: Item[], action: Action): Item[] {
 
 const UPLOAD_CONCURRENCY = 3;
 const HASH_CONCURRENCY = 2;
-const ACCEPT = Object.keys(ACCEPTED_VIDEO_TYPES).join(",") + ",.mp4,.mov,.webm,.m4v";
+const ACCEPT = Object.keys(ACCEPTED_VIDEO_TYPES).join(",") + ",.mp4,.mov,.m4v";
 
 const STATUS_LABEL: Record<Status, string> = {
   invalid: "Inválido",
@@ -163,6 +164,16 @@ export function Uploader({ workspaceId, slug, maxBytes }: { workspaceId: string;
         }
         patch(item.id, { mediaId, resumed, status: "uploading" });
 
+        // Miniatura em paralelo ao envio; precisa estar gravada antes de concluir (a análise a usa).
+        const thumbPath = `${workspaceId}/${mediaId}/thumb.jpg`;
+        const thumbDone = makeThumbnail(file)
+          .then(async (blob) => {
+            if (!blob) return;
+            // Já existir (envio retomado) não é erro.
+            await supabase.storage.from("media").upload(thumbPath, blob, { contentType: "image/jpeg", upsert: false });
+          })
+          .catch(() => undefined);
+
         const upload = new tus.Upload(file, {
           endpoint: tusEndpoint(publicEnv().NEXT_PUBLIC_SUPABASE_URL),
           chunkSize: TUS_CHUNK_SIZE,
@@ -194,6 +205,7 @@ export function Uploader({ workspaceId, slug, maxBytes }: { workspaceId: string;
           onSuccess: async () => {
             uploads.current.delete(item.id);
             patch(item.id, { status: "finalizing", progress: 100 });
+            await thumbDone;
             const { data, error } = await supabase.rpc("complete_media_upload", { p_media: mediaId! });
             if (error || data === "failed") {
               patch(item.id, { status: "error", error: "O arquivo recebido não confere com o original. Envie novamente." });
@@ -291,7 +303,7 @@ export function Uploader({ workspaceId, slug, maxBytes }: { workspaceId: string;
         <div>
           <p className="font-medium">Arraste vídeos para cá</p>
           <p className="text-sm text-muted-foreground">
-            MP4, MOV ou WebM · até {formatBytes(maxBytes)} por arquivo · vários de uma vez
+            MP4 ou MOV · até {formatBytes(maxBytes)} por arquivo · vários de uma vez
           </p>
         </div>
         <Button type="button" onClick={() => inputRef.current?.click()}>
