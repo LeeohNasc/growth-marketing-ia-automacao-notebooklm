@@ -14,9 +14,9 @@ SaaS de upload em massa e publicação automática e recorrente de vídeos curto
 | Fase 3 — Agendamento | Concluída no código com conector simulado — ver [docs/PHASE-3.md](docs/PHASE-3.md) |
 | Fase 4 — Meta (Instagram/Facebook) | **Implementada e testada contra respostas simuladas da Graph API; BLOQUEADA para validação real** — ver [docs/PHASE-4.md](docs/PHASE-4.md) |
 | Fase 5 — escopo reduzido | **Equipes, limites de plano e analytics interno concluídos no código.** TikTok, YouTube, IA e cobrança NÃO implementados (motivos em [docs/PHASE-5.md](docs/PHASE-5.md)) |
-| Projeto Supabase | **Não criado** (requer sua autorização) — auth real ainda não exercitado |
-| Integrações externas | Nenhuma chamada real feita. Instagram/Facebook: código pronto, sem app Meta configurado |
-| Infraestrutura | Nenhum serviço criado, nenhum custo assumido |
+| Deploy de demonstração | **No ar e validado em produção** em https://reelsflow-xi.vercel.app (Vercel + Supabase gratuitos; worker como Edge Function) — ver [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) |
+| Integrações externas | Publicação real **não** habilitada: só o publicador simulado. Instagram/Facebook: código pronto, sem app Meta configurado |
+| Pendências de painel | Site URL do Auth da Supabase, SMTP próprio e app Meta (detalhes em DEPLOYMENT.md) |
 
 Legenda usada em toda a documentação:
 
