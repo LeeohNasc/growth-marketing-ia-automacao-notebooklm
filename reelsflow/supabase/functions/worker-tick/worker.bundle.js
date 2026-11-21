@@ -2644,7 +2644,7 @@ async function runEdgeTick(env, postgres, invocationId) {
       opts,
       { lastMaintenance: 0 }
     );
-    log.info("tick done", { processed, ms: Date.now() - started });
+    log.info("tick done", { processed, ms: Date.now() - started, zernio_configured: zernio !== null });
     return { processed, ms: Date.now() - started };
   } finally {
     await db.end();

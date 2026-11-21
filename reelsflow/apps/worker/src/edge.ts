@@ -80,7 +80,8 @@ export async function runEdgeTick(env: EdgeEnv, postgres: PostgresFactory, invoc
       opts,
       { lastMaintenance: 0 },
     );
-    log.info("tick done", { processed, ms: Date.now() - started });
+    // Só a PRESENÇA da chave (booleano): o valor nunca vai para logs.
+    log.info("tick done", { processed, ms: Date.now() - started, zernio_configured: zernio !== null });
     return { processed, ms: Date.now() - started };
   } finally {
     await db.end();
