@@ -9,7 +9,13 @@ const types = { ".css": "text/css", ".html": "text/html", ".js": "text/javascrip
 createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
   if (url.pathname === "/health") return res.writeHead(200).end("ok");
+  if (url.pathname.startsWith("/slow/")) {
+    await new Promise((r) => setTimeout(r, 2500));
+    url.pathname = url.pathname.slice(5);
+    req.url = url.pathname;
+  }
   const [prefix, dir] = Object.entries(roots).find(([p]) => url.pathname.startsWith(p));
+  // (rota /slow/ já reescrita acima)
   const file = path.join(dir, url.pathname.slice(prefix.length) || "index.html");
   if (!file.startsWith(dir)) return res.writeHead(403).end();
   try {

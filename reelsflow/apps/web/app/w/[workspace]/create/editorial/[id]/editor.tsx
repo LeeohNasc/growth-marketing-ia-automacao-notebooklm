@@ -120,9 +120,11 @@ export function EditorialEditor(props: {
           load("logo", props.sourceUrls.logo, ((c.style ?? {}) as Style).watermark?.logoPath ?? null),
         ]);
         if (!alive) return;
-        setAvatar(a);
-        setMedia([m0, m1]);
-        setLogo(l);
+        // Nunca sobrescrever um arquivo que o usuário escolheu enquanto o carregamento acontecia.
+        const keep = (cur: Slot, loaded: Slot) => (cur.dirty || cur.src ? cur : loaded);
+        setAvatar((cur) => keep(cur, a));
+        setMedia((cur) => [keep(cur[0], m0), keep(cur[1], m1)]);
+        setLogo((cur) => keep(cur, l));
       } finally {
         if (alive) setLoadingSources(false);
       }
@@ -354,7 +356,8 @@ export function EditorialEditor(props: {
 
   const ready = status === "ready" && !dirty && renderedMediaId;
   const dims = CARD_FORMATS[format];
-  const disabled = !props.canEdit || Boolean(busy);
+  const disabled = !props.canEdit || Boolean(busy) || loadingSources;
+  const filesDisabled = !props.canEdit || loadingSources;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(340px,440px)_1fr]">
@@ -401,7 +404,7 @@ export function EditorialEditor(props: {
           )}
           <div className="grid gap-1.5">
             <Label htmlFor="ec-avatar">Foto do perfil (recorte redondo central)</Label>
-            <Input id="ec-avatar" type="file" accept={sourceAccept("avatar")} onChange={(e) => pick("avatar", e.target.files?.[0], setAvatar)} disabled={!props.canEdit} />
+            <Input id="ec-avatar" type="file" accept={sourceAccept("avatar")} onChange={(e) => pick("avatar", e.target.files?.[0], setAvatar)} disabled={filesDisabled} />
             <p className="text-xs text-muted-foreground">{sourceHint("avatar")}</p>
           </div>
           <div className="grid gap-1.5">
@@ -461,7 +464,7 @@ export function EditorialEditor(props: {
                 type="file"
                 accept={sourceAccept(mediaKind === "video" ? "video" : "image")}
                 onChange={(e) => pick(mediaKind === "video" ? "video" : "image", e.target.files?.[0], (s) => setMedia((m) => (i === 0 ? [s, m[1]] : [m[0], s])))}
-                disabled={!props.canEdit}
+                disabled={filesDisabled}
               />
               <p className="text-xs text-muted-foreground">{sourceHint(mediaKind === "video" ? "video" : "image")}</p>
               {fit === "cover" && media[i]?.src && (
@@ -509,7 +512,7 @@ export function EditorialEditor(props: {
           {style.watermark.kind === "logo" && (
             <div className="grid gap-1.5">
               <Label htmlFor="ec-logo">Logo (PNG com fundo transparente funciona melhor)</Label>
-              <Input id="ec-logo" type="file" accept={sourceAccept("logo")} onChange={(e) => pick("logo", e.target.files?.[0], setLogo)} disabled={!props.canEdit} />
+              <Input id="ec-logo" type="file" accept={sourceAccept("logo")} onChange={(e) => pick("logo", e.target.files?.[0], setLogo)} disabled={filesDisabled} />
             </div>
           )}
           {style.watermark.kind !== "none" && (
@@ -554,7 +557,11 @@ export function EditorialEditor(props: {
         <div className="mx-auto w-full overflow-hidden rounded-xl border bg-white shadow-sm" style={{ maxWidth: format === "vertical" ? 380 : 520 }}>
           <canvas ref={canvasRef} width={dims.width} height={dims.height} className="block h-auto w-full" role="img" aria-label={`Prévia do card ${dims.width}×${dims.height}: ${pageName} @${normalizeUsername(username)} — ${headline}`} />
         </div>
-        {loadingSources && <p className="text-center text-xs text-muted-foreground">Carregando arquivos salvos…</p>}
+        {loadingSources && (
+          <p className="flex items-center justify-center gap-2 text-xs text-muted-foreground" aria-live="polite">
+            <Loader2 className="size-3 animate-spin" aria-hidden /> Carregando arquivos salvos… (os campos de arquivo liberam em instantes)
+          </p>
+        )}
         {mediaKind === "video" && videoUrl && (
           <div className="mx-auto flex w-full max-w-[520px] items-center gap-2">
             <video ref={videoRef} src={videoUrl} muted={muted} playsInline preload="auto" className="hidden" />

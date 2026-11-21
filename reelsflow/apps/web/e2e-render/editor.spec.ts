@@ -24,14 +24,15 @@ const baseCard = (over: Record<string, unknown> = {}) => ({
 });
 const accounts = [{ id: "acc-1", display_name: "🍿 Pipocou | Humor e Memes", username: "pipocoumemes", platform: "instagram", provider: "zernio" }];
 
-async function mount(page: Page, card = baseCard()) {
+async function mount(page: Page, card = baseCard(), sourceUrls: { avatar: string | null; media: (string | null)[]; logo: string | null } = { avatar: null, media: [], logo: null }, waitReady = true) {
   await page.goto("/editor.html");
   await page.waitForSelector("body[data-ready='1']", { state: "attached" });
   await page.evaluate(
-    ([c, a, slug, ws]) => (window as unknown as { mountEditor: (p: unknown) => void }).mountEditor({ slug, workspaceId: ws, canEdit: true, card: c, sourceUrls: { avatar: null, media: [], logo: null }, accounts: a, renderedUrl: null }),
-    [card, accounts, "leeoh", WS] as const,
+    ([c, a, slug, ws, urls]) => (window as unknown as { mountEditor: (p: unknown) => void }).mountEditor({ slug, workspaceId: ws, canEdit: true, card: c, sourceUrls: urls, accounts: a, renderedUrl: null }),
+    [card, accounts, "leeoh", WS, sourceUrls] as const,
   );
   await expect(page.getByRole("heading", { name: "Manchete" })).toBeVisible();
+  if (waitReady) await expect(page.getByText(/Carregando arquivos salvos/)).toHaveCount(0, { timeout: 15_000 });
 }
 const fake = (page: Page) => page.evaluate(() => {
   const f = (window as unknown as { __fake: { card: Record<string, unknown>; calls: { op: string; args: Record<string, unknown> }[]; storage: Map<string, Blob> } }).__fake;
@@ -171,4 +172,22 @@ test("celular: prévia acima dos controles, sem rolagem horizontal", async ({ pa
   expect(canvasBox!.y).toBeLessThan(formBox!.y);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: path.join(OUT, "editor-mobile.png"), fullPage: true });
+});
+
+
+test("carregamento lento das origens salvas: campos bloqueados até terminar e nada escolhido é perdido", async ({ page }) => {
+  // card já salvo com avatar; as origens chegam devagar (2,5 s), como na produção com rede real
+  const card = baseCard({ page_name: "Pipocou", username: "pipocoumemes", headline: "Manchete", avatar_path: `${WS}/cards/${CARD}/avatar-1.png` });
+  await mount(page, card, { avatar: "/slow/fixtures/avatar.png", media: [], logo: null }, false);
+  const photo = page.getByLabel("Arquivo da foto");
+  await expect(photo).toBeDisabled(); // não dá para escolher antes do carregamento terminar
+  await expect(page.getByText(/Carregando arquivos salvos/)).toBeVisible();
+  await expect(photo).toBeEnabled({ timeout: 15_000 });
+  await photo.setInputFiles(path.join(FX, "photo1.jpg"));
+  await expect(page.getByRole("button", { name: "Baixar PNG" })).toBeEnabled();
+  await page.getByRole("button", { name: "Salvar rascunho" }).click();
+  await expect(page.getByText("Rascunho salvo.")).toBeVisible();
+  const saved = (await fake(page)).calls.filter((c) => c.op === "update:editorial_cards").at(-1)!.args;
+  expect(saved.avatar_path).toBe(`${WS}/cards/${CARD}/avatar-1.png`); // avatar salvo preservado
+  expect((saved.media_paths as string[]).length).toBe(1); // foto escolhida preservada
 });
