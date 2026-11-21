@@ -308,7 +308,7 @@ export default function LandingPage() {
 
       <footer className={s.footer}>
         <div className={`${s.container} ${s.footerInner}`}>
-          <Brand />
+          <Brand size="footer" />
           <span className={s.muted}>Prévia comercial do produto</span>
           <nav aria-label="Rodapé" className={s.footerNav}>
             <a href="#faq">Perguntas frequentes</a>

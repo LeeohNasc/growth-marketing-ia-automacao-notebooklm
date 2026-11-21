@@ -176,24 +176,21 @@
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  font-weight: 700;
-  font-size: 1.05rem;
-  letter-spacing: -0.02em;
   color: var(--text) !important;
+  border-radius: 6px;
 }
-.brandMark {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
-  background: var(--red);
-  color: #fff;
+.brandHeader {
+  height: 30px;
+  width: auto;
 }
-.brandMark svg {
-  width: 16px;
-  height: 16px;
+.brandFooter {
+  height: 24px;
+  width: auto;
+}
+@media (max-width: 380px) {
+  .brandHeader {
+    height: 26px;
+  }
 }
 .nav {
   display: flex;

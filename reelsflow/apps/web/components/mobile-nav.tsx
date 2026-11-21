@@ -18,7 +18,7 @@ export function MobileNav({ slug }: { slug: string }) {
       <SheetContent aria-describedby={undefined}>
         <SheetTitle className="sr-only">Menu</SheetTitle>
         <div className="flex h-14 items-center px-6">
-          <Logo href={`/w/${slug}/overview`} />
+          <Logo href={`/w/${slug}/overview`} label="ReelsFlow — visão geral do workspace" />
         </div>
         <div className="flex-1 overflow-y-auto pb-6">
           <AppNav slug={slug} onNavigate={() => setOpen(false)} />
