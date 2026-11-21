@@ -8,7 +8,8 @@
     "start": "tsx src/main.ts",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
-    "test:integration": "vitest run"
+    "test:integration": "vitest run",
+    "zernio:connect": "tsx scripts/zernio-connect.ts"
   },
   "dependencies": {
     "@reelsflow/connectors": "workspace:*",

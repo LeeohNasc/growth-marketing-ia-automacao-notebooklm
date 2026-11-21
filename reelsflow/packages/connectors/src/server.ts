@@ -6,3 +6,4 @@ export * from "./meta/instagram";
 export * from "./meta/facebook";
 export * from "./meta/signed-request";
 export * from "./meta/instagram-login";
+export * from "./zernio/client";
