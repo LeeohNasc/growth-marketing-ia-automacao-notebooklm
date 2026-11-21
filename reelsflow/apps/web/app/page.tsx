@@ -141,7 +141,7 @@ export default function LandingPage() {
         </section>
 
         {/* Integrações — cards em HTML enquanto alguma rede estiver em teste ou planejada */}
-        <section id="integracoes" className={s.section} aria-labelledby="integ-title">
+        <section id="integracoes" className={`${s.section} ${s.integrationsSection}`} aria-labelledby="integ-title">
           <div className={s.container}>
             <div className={s.integrationsPanel}>
               <h2 id="integ-title" className={s.panelTitle}>
