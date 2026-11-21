@@ -7,8 +7,9 @@ import { CampaignWizard } from "./wizard";
 
 export const metadata: Metadata = { title: "Nova campanha" };
 
-export default async function NewCampaignPage({ params }: { params: Promise<{ workspace: string }> }) {
+export default async function NewCampaignPage({ params, searchParams }: { params: Promise<{ workspace: string }>; searchParams: Promise<{ media?: string }> }) {
   const { workspace: slug } = await params;
+  const { media: preselect } = await searchParams;
   const { workspace } = await requireWorkspace(slug);
   const supabase = await createClient();
   const [{ data: templates }, { data: accounts }, { data: videos }, { data: collections }, { data: items }] = await Promise.all([
@@ -34,10 +35,11 @@ export default async function NewCampaignPage({ params }: { params: Promise<{ wo
     <div className="mx-auto grid max-w-5xl gap-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Nova campanha</h1>
-        <p className="text-sm text-muted-foreground">Vídeos → contas e modelo → calendário gerado automaticamente → revisar → ativar.</p>
+        <p className="text-sm text-muted-foreground">Mídias prontas (vídeos e cards) → contas e modelo → calendário gerado automaticamente → revisar → ativar.</p>
       </div>
       <CampaignWizard
         slug={slug}
+        preselectedMedia={preselect && /^[0-9a-f-]{36}$/.test(preselect) ? [preselect] : []}
         templates={templates ?? []}
         accounts={(accounts ?? []).map(({ settings, ...a }) => ({ ...a, username: (settings as { username?: string } | null)?.username ?? null }))}
         videos={(videos ?? []).map((v) => ({ ...v, thumbUrl: v.thumbnail_path ? (thumbs.get(v.thumbnail_path) ?? null) : null }))}

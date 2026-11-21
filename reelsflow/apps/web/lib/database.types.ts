@@ -8,6 +8,19 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 export type WorkspaceRole = "viewer" | "editor" | "admin" | "owner";
 export type MediaStatus = "uploading" | "uploaded" | "processing" | "ready" | "failed";
 
+export type CardRenderStatus = "draft" | "rendering" | "processing" | "ready" | "error";
+export type EditorialCardRow = {
+  id: string; workspace_id: string; created_by: string | null; template_type: "editorial_card"; template_version: number;
+  title: string; page_name: string; username: string; headline: string; caption: string | null; hashtags: string[];
+  format: "feed" | "square" | "vertical"; media_kind: "image" | "image_pair" | "video"; fit: "cover" | "contain";
+  style: Json; focal: Json; avatar_path: string | null; media_paths: string[]; media_meta: Json; social_account_id: string | null;
+  render_status: CardRenderStatus; render_error: string | null; rendered_media_id: string | null;
+  render_started_at: string | null; rendered_at: string | null; created_at: string; updated_at: string;
+};
+export type EditorialCardUpdate = Partial<Pick<EditorialCardRow,
+  "title" | "page_name" | "username" | "headline" | "caption" | "hashtags" | "format" | "media_kind" | "fit" | "style" | "focal" |
+  "avatar_path" | "media_paths" | "media_meta" | "social_account_id">>;
+
 export type MediaAssetRow = {
   id: string;
   workspace_id: string;
@@ -39,6 +52,10 @@ export type MediaAssetRow = {
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
+  /** Gerado pelo banco a partir do MIME: video | image. */
+  kind: "video" | "image";
+  /** Card Editorial que gerou este arquivo final (se houver). */
+  source_card_id: string | null;
 };
 
 type Timestamps = { created_at: string };
@@ -157,6 +174,12 @@ export type Database = {
         Update: never;
         Relationships: [];
       };
+      editorial_cards: {
+        Row: EditorialCardRow;
+        Insert: Pick<EditorialCardRow, "workspace_id" | "created_by" | "title"> & EditorialCardUpdate;
+        Update: EditorialCardUpdate;
+        Relationships: [];
+      };
       media_assets: {
         Row: MediaAssetRow;
         Insert: never;
@@ -243,6 +266,10 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      set_card_render_state: { Args: { p_card: string; p_state: "rendering" | "error" | "draft"; p_error?: string | null }; Returns: CardRenderStatus };
+      attach_card_render: { Args: { p_card: string; p_media: string }; Returns: CardRenderStatus };
+      duplicate_editorial_card: { Args: { p_card: string }; Returns: string };
+      delete_editorial_card: { Args: { p_card: string }; Returns: undefined };
       create_workspace: {
         Args: { p_name: string; p_timezone: string };
         Returns: Database["public"]["Tables"]["workspaces"]["Row"];
@@ -288,7 +315,7 @@ export type Database = {
         Returns: { workspace_id: string; workspace_name: string; other_members: number }[];
       };
     };
-    Enums: { workspace_role: WorkspaceRole; media_status: MediaStatus; social_platform: SocialPlatform; campaign_status: CampaignStatus; job_status: JobStatusDb };
+    Enums: { workspace_role: WorkspaceRole; media_status: MediaStatus; card_render_status: CardRenderStatus; social_platform: SocialPlatform; campaign_status: CampaignStatus; job_status: JobStatusDb };
     CompositeTypes: Record<string, never>;
   };
 };

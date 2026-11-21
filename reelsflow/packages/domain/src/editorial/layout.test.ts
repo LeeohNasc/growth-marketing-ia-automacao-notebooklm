@@ -170,3 +170,14 @@ describe("RGBA → I420 faixa limitada BT.709", () => {
     expect(() => rgbaToI420Limited(px(0, 0, 0, 3, 2), 3, 2)).toThrow();
   });
 });
+
+import { isCompatible } from "../scheduling/plan";
+describe("agendamento de imagem por tipo de conta", () => {
+  const imageItem = { campaignMediaId: "c", mediaId: "m", name: "card", compatibility: { kind: "image", rulesVersion: "x", platforms: { instagram_reels: { status: "warning", issues: [] } } } } as never;
+  it("imagem: só contas via Zernio (ou simuladas); conector direto recusa antes de agendar", () => {
+    expect(isCompatible(imageItem, "instagram", "zernio")).toBe(true);
+    expect(isCompatible(imageItem, "instagram", "native")).toBe(false);
+    expect(isCompatible(imageItem, "instagram")).toBe(false);
+    expect(isCompatible(imageItem, "mock")).toBe(true);
+  });
+});

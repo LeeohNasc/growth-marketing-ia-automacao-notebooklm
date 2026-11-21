@@ -15,6 +15,7 @@ import { VideoPicker, type PickerVideo } from "../video-picker";
 type Account = { id: string; display_name: string; username: string | null; provider: "native" | "zernio"; platform: SocialPlatform; status: string; paused: boolean };
 
 export function CampaignWizard(props: {
+  preselectedMedia?: string[];
   slug: string;
   templates: TemplateRow[];
   accounts: Account[];
@@ -50,7 +51,7 @@ export function CampaignWizard(props: {
             ))}
           </div>
           {source === "videos" ? (
-            <VideoPicker videos={props.videos} error={e.media} />
+            <VideoPicker videos={props.videos} error={e.media} initialSelected={props.preselectedMedia} />
           ) : (
             <div className="grid gap-3">
               <div className="grid max-w-sm gap-2">

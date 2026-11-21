@@ -21,5 +21,5 @@ export default defineConfig([
     files: ["lib/supabase/admin.ts"],
     rules: { "no-restricted-syntax": "off" },
   },
-  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "playwright-report/**", "test-results/**"]),
+  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "playwright-report/**", "test-results/**", "e2e-render/site/**", "e2e-render/samples/**"]),
 ]);

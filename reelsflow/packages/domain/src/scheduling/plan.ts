@@ -32,6 +32,8 @@ export type PlanTarget = {
   targetId: string;
   accountId: string;
   platform: SocialPlatform;
+  /** Como a conta foi conectada: imagens só são publicadas por contas via Zernio (ou simuladas). */
+  provider?: "native" | "zernio";
   /** Modo independente: regra própria; espelhado: ignorado (usa a da campanha). */
   rule?: ScheduleRule;
   offsetMinutes: number;
@@ -74,7 +76,9 @@ export type PlanInput = {
 
 export type Plan = { jobs: PlannedJob[]; skipped: SkippedItem[]; truncated: boolean };
 
-export function isCompatible(item: PlanMedia, platform: SocialPlatform): boolean {
+export function isCompatible(item: PlanMedia, platform: SocialPlatform, provider: "native" | "zernio" = "native"): boolean {
+  // Imagem (ex.: Card Editorial): os conectores diretos só publicam Reels (vídeo).
+  if ((item.compatibility as { kind?: string } | null)?.kind === "image" && platform !== "mock" && provider !== "zernio") return false;
   const key = COMPAT_KEY[platform];
   if (!key) return true;
   const status = item.compatibility?.platforms?.[key]?.status;
@@ -113,7 +117,7 @@ export function buildPlan(input: PlanInput): Plan {
           skipped.push({ mediaId: item.mediaId, name: item.name, targetId: t.targetId, reason: "no_slot" });
           continue;
         }
-        if (!isCompatible(item, t.platform)) {
+        if (!isCompatible(item, t.platform, t.provider)) {
           skipped.push({ mediaId: item.mediaId, name: item.name, targetId: t.targetId, reason: "incompatible" });
           continue;
         }
@@ -138,7 +142,7 @@ export function buildPlan(input: PlanInput): Plan {
       const mine = input.media.filter((m) => m.targetId === t.targetId);
       const usable: PlanMedia[] = [];
       for (const m of mine) {
-        if (isCompatible(m, t.platform)) usable.push(m);
+        if (isCompatible(m, t.platform, t.provider)) usable.push(m);
         else skipped.push({ mediaId: m.mediaId, name: m.name, targetId: t.targetId, reason: "incompatible" });
       }
       const slots = generateSlots(rule, { notBefore: later(input.notBefore, input.notBeforeByTarget?.[t.targetId]), limit: usable.length });

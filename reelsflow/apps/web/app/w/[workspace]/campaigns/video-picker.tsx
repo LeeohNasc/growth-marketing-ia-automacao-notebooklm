@@ -8,9 +8,10 @@ import { cn } from "@/lib/utils";
 export type PickerVideo = { id: string; name: string; duration_ms: number | null; compatibility: unknown; thumbUrl: string | null; created_at: string };
 
 /** Seleção de vídeos prontos (envia `media[]` na ordem de seleção). */
-export function VideoPicker({ videos, error, exclude = [] }: { videos: PickerVideo[]; error?: string; exclude?: string[] }) {
+export function VideoPicker({ videos, error, exclude = [], initialSelected = [] }: { videos: PickerVideo[]; error?: string; exclude?: string[]; initialSelected?: string[] }) {
   const [q, setQ] = useState("");
-  const [selected, setSelected] = useState<string[]>([]);
+  // Pré-seleção (ex.: "Agendar" a partir de um Card Editorial pronto); só ids existentes na lista.
+  const [selected, setSelected] = useState<string[]>(() => initialSelected.filter((id) => videos.some((v) => v.id === id)));
   const available = useMemo(() => videos.filter((v) => !exclude.includes(v.id)), [videos, exclude]);
   const shown = available.filter((v) => v.name.toLowerCase().includes(q.trim().toLowerCase()));
   const toggle = (id: string) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));

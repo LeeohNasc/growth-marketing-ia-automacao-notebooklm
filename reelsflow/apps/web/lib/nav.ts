@@ -10,6 +10,7 @@ import {
   ListOrdered,
   Megaphone,
   Settings,
+  SquarePen,
   Upload,
   Users,
   type LucideIcon,
@@ -24,11 +25,12 @@ export type NavItem = {
   description: string;
 };
 
-/** Os 13 itens do menu lateral do PRD, na ordem definida. */
+/** Itens do menu lateral (os 13 do PRD + "Criar publicação"), na ordem definida. */
 export const NAV_ITEMS: NavItem[] = [
   { key: "overview", label: "Visão Geral", icon: LayoutDashboard, phase: 1, description: "Resumo do workspace." },
   { key: "library", label: "Biblioteca de Vídeos", icon: Film, phase: 2, description: "Todos os vídeos enviados, com metadados, compatibilidade e histórico." },
   { key: "upload", label: "Upload em Massa", icon: Upload, phase: 2, description: "Envio de dezenas de vídeos com progresso, retomada e detecção de duplicados." },
+  { key: "create", label: "Criar publicação", icon: SquarePen, phase: 6, description: "Modelos de conteúdo renderizados no próprio ReelsFlow, como o Card Editorial." },
   { key: "calendar", label: "Calendário", icon: CalendarDays, phase: 3, description: "Publicações por dia, semana, mês ou lista, com reagendamento por arrastar." },
   { key: "queue", label: "Fila de Publicações", icon: ListOrdered, phase: 3, description: "Monitoramento operacional de cada publicação, tentativas e erros." },
   { key: "campaigns", label: "Campanhas", icon: Megaphone, phase: 3, description: "Conjuntos de vídeos distribuídos automaticamente por um modelo." },
@@ -41,7 +43,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "billing", label: "Assinatura", icon: CreditCard, phase: 5, description: "Plano atual e uso medido. Cobrança real ainda não integrada." },
 ];
 
-export const IMPLEMENTED_SECTIONS = new Set(["overview", "library", "upload", "calendar", "queue", "campaigns", "templates", "accounts", "history", "analytics", "notifications", "settings", "billing"]);
+export const IMPLEMENTED_SECTIONS = new Set(["overview", "library", "upload", "create", "calendar", "queue", "campaigns", "templates", "accounts", "history", "analytics", "notifications", "settings", "billing"]);
 
 export function findNavItem(key: string) {
   return NAV_ITEMS.find((i) => i.key === key);

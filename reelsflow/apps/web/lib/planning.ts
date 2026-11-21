@@ -34,12 +34,13 @@ export async function planCampaign(supabase: Supabase, campaignId: string, mode:
   const accountIds = (targets ?? []).map((t) => t.social_account_id);
   const mediaIds = [...new Set((items ?? []).map((i) => i.media_asset_id))];
   const [{ data: accounts }, { data: media }] = await Promise.all([
-    accountIds.length ? supabase.from("social_accounts").select("id, platform").in("id", accountIds) : Promise.resolve({ data: [] as { id: string; platform: SocialPlatform }[] }),
+    accountIds.length ? supabase.from("social_accounts").select("id, platform, provider").in("id", accountIds) : Promise.resolve({ data: [] as { id: string; platform: SocialPlatform; provider: "native" | "zernio" }[] }),
     mediaIds.length
       ? supabase.from("media_assets").select("id, name, compatibility, created_at, status, deleted_at").in("id", mediaIds)
       : Promise.resolve({ data: [] as { id: string; name: string; compatibility: unknown; created_at: string; status: string; deleted_at: string | null }[] }),
   ]);
   const platformOf = new Map((accounts ?? []).map((a) => [a.id, a.platform as SocialPlatform]));
+  const providerOf = new Map((accounts ?? []).map((a) => [a.id, (a as { provider?: "native" | "zernio" }).provider ?? "native"]));
   const mediaById = new Map((media ?? []).map((m) => [m.id, m]));
 
   // Publicações que não devem ser recriadas: já iniciadas/concluídas, fixadas, ou (no modo append) qualquer existente.
@@ -54,6 +55,7 @@ export async function planCampaign(supabase: Supabase, campaignId: string, mode:
     targetId: t.id,
     accountId: t.social_account_id,
     platform: platformOf.get(t.social_account_id) ?? "mock",
+    provider: providerOf.get(t.social_account_id) ?? "native",
     offsetMinutes: t.offset_minutes,
     rule: c.mode === "independent" && t.weekdays?.length && t.times?.length ? { ...rule, weekdays: t.weekdays, times: t.times } : undefined,
   }));

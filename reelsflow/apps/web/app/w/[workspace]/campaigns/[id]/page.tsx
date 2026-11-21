@@ -101,7 +101,7 @@ export default async function CampaignPage({
         ? "vídeo excluído"
         : m.status !== "ready"
           ? "vídeo ainda não está pronto"
-          : acc && !isCompatible({ campaignMediaId: it.id, mediaId: m.id, name: m.name, compatibility: m.compatibility as Compatibility }, acc.platform as SocialPlatform)
+          : acc && !isCompatible({ campaignMediaId: it.id, mediaId: m.id, name: m.name, compatibility: m.compatibility as Compatibility }, acc.platform as SocialPlatform, (acc as { provider?: "native" | "zernio" }).provider)
             ? "incompatível com a rede"
             : campaign.end_date
               ? "sem horário disponível até a data final"

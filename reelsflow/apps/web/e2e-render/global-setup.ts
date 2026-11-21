@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { build } from "esbuild";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -35,4 +35,41 @@ export default async function setup() {
     logLevel: "error",
   });
   writeFileSync(path.join(site, "index.html"), `<!doctype html><html><head><meta charset="utf-8"></head><body><script type="module" src="/harness.js"></script></body></html>`);
+
+  // Editor REAL montado fora do Next: só cliente Supabase, next/link e server actions são trocados.
+  const web = path.join(__dirname, "..");
+  await build({
+    entryPoints: [path.join(__dirname, "editor-harness.tsx")],
+    outfile: path.join(site, "editor.js"),
+    bundle: true,
+    format: "esm",
+    platform: "browser",
+    target: "es2022",
+    jsx: "automatic",
+    logLevel: "error",
+    define: { "process.env.NODE_ENV": '"production"' },
+    plugins: [
+      {
+        name: "harness-aliases",
+        setup(b) {
+          b.onResolve({ filter: /^@\/lib\/supabase\/client$/ }, () => ({ path: path.join(__dirname, "fake-supabase.ts") }));
+          b.onResolve({ filter: /^next\/link$/ }, () => ({ path: path.join(__dirname, "stubs.tsx") }));
+          b.onResolve({ filter: /\/actions$/ }, (a) => (a.importer.includes("create/editorial") ? { path: path.join(__dirname, "stubs.tsx") } : undefined));
+          b.onResolve({ filter: /^@\// }, async (a) => b.resolve("./" + a.path.slice(2), { resolveDir: web, kind: a.kind }));
+        },
+      },
+    ],
+  });
+  // CSS do próprio app (Tailwind compilado no build do Next) para as capturas terem o visual real.
+  // Turbopack grava o CSS em .next/static/chunks/*.css (webpack usava .next/static/css).
+  const css = ["css", "chunks"]
+    .map((d) => path.join(web, ".next", "static", d))
+    .filter((d) => existsSync(d))
+    .flatMap((d) => readdirSync(d).filter((f) => f.endsWith(".css")).map((f) => readFileSync(path.join(d, f), "utf8")))
+    .join("\n");
+  writeFileSync(path.join(site, "app.css"), css);
+  writeFileSync(
+    path.join(site, "editor.html"),
+    `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/app.css"></head><body class="bg-background text-foreground antialiased"><main class="p-4 sm:p-6"><div id="root"></div></main><script type="module" src="/editor.js"></script></body></html>`,
+  );
 }
