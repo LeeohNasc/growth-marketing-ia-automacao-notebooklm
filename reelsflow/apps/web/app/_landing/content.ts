@@ -78,23 +78,23 @@ export const PLANS: { key: PlanKey; name: string; price: string; period: string 
   { key: "starter", name: "Starter", price: "Grátis", period: null, audience: "Para experimentar", features: ["1 conexão social limitada.", "1 usuário.", "Editor básico."] },
   {
     key: "pro", name: "Pro", price: "R$ 99,90", period: "/mês", audience: "Para criadores individuais",
-    features: ["1 conta social · 1 marca.", "1 usuário.", "Card Editorial.", "Agendamento automático.", "Publicação em lote."],
+    features: ["1 conta social.", "1 usuário.", "Agendamento automático.", "Publicação em lote.", "Card Editorial (em homologação).", "1 marca (planejado)."],
   },
   {
     key: "business", name: "Business", price: "R$ 299,90", period: "/mês", audience: "Para empresas", featured: true,
-    features: ["4 contas sociais · 1 marca.", "3 membros.", "Publicação multirrede.", "Biblioteca compartilhada.", "Permissões básicas de equipe."],
+    features: ["4 contas sociais.", "3 membros.", "Publicação multirrede.", "Biblioteca compartilhada.", "Permissões básicas de equipe.", "1 marca (planejado)."],
   },
   {
     key: "premium", name: "Premium", price: "R$ 799,90", period: "/mês", audience: "Para agências",
-    features: ["12 contas sociais · 3 marcas.", "6 membros.", "Permissões avançadas propostas.", "Gestão por cliente, aprovações e relatórios avançados no roteiro de desenvolvimento."],
+    features: ["12 contas sociais.", "6 membros.", "3 marcas (planejado).", "Permissões avançadas (planejado).", "Gestão por cliente, aprovações e relatórios avançados no roteiro de desenvolvimento."],
   },
 ];
 
 export const COMPARISON: [string, string, string, string, string][] = [
   ["Contas sociais", "1 (limitada)", "1", "4", "12"],
-  ["Marcas", "A definir", "1", "1", "3"],
+  ["Marcas", "A definir", "1 (planejado)", "1 (planejado)", "3 (planejado)"],
   ["Usuários ou membros", "1", "1", "3", "6"],
-  ["Card Editorial", "Editor básico", "Incluído", "Incluído", "Incluído"],
+  ["Card Editorial", "A definir", "Em homologação", "Em homologação", "Em homologação"],
   ["Agendamento automático", "A definir", "Incluído", "Incluído", "Incluído"],
   ["Publicação em lote", "A definir", "Incluída", "Incluída", "Incluída"],
   ["Publicação multirrede", "A definir", "Limitada a 1 conexão", "Incluída", "Incluída"],

@@ -127,10 +127,16 @@ export type Database = {
       subscriptions: {
         Row: {
           workspace_id: string;
-          plan: "starter" | "pro" | "agency";
+          plan: "starter" | "pro" | "business" | "premium" | "agency";
           status: "active" | "past_due" | "canceled";
           limits: Json;
           provider_ref: string | null;
+          billing_interval: "month" | "year" | null;
+          provider_status: string | null;
+          current_period_end: string | null;
+          cancel_at_period_end: boolean;
+          /** só service role (não legível pelo navegador) */
+          stripe_customer_id?: string | null;
           updated_at: string;
         } & Timestamps;
         Insert: never;

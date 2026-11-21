@@ -1,6 +1,7 @@
 # Landing page e cobrança
 
-> Estado em 2026-11-21: landing implementada na rota pública `/` (local, sem deploy). **Não existe cobrança.**
+> Estado em 2026-11-21: landing na rota pública `/`. Cobrança v1 (Stripe, modo de teste) implementada
+> localmente — ver **docs/BILLING.md**. O texto abaixo registra o diagnóstico inicial.
 
 ## Landing (`/`)
 

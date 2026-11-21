@@ -99,7 +99,7 @@ describe("limites de plano (provisórios)", () => {
   it("assentos contam convites pendentes", async () => {
     const o = await createUser({ email: uniqueEmail("s2") });
     const ws = (await createWorkspaceAs(o, "Pro")).id;
-    await setPlan(ws, "pro"); // 3 assentos
+    await setPlan(ws, "business"); // 3 assentos
     for (let i = 0; i < 2; i++) await asUser(o, (db) => db.query("select public.create_invitation($1, $2, 'editor')", [ws, uniqueEmail(`p${i}`)]), { commit: true });
     const err = await asUser(o, (db) => db.query("select public.create_invitation($1, $2, 'editor')", [ws, uniqueEmail("p3")])).catch((e) => e);
     expect(err.message).toBe("plan limit: seats");

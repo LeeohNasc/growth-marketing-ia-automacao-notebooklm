@@ -5,6 +5,7 @@ import { AUDIENCE, COMPARISON, FAQ, GLOSSARY, PLANS, TESTIMONIALS, USE_CASE_STEP
 import { PanelDemo } from "./_landing/demo";
 import { LandingHeader } from "./_landing/header";
 import s from "./_landing/landing.module.css";
+import { billingConfig } from "@/lib/billing/server";
 
 const TITLE = "ReelsFlow — vídeos curtos organizados e programados";
 const DESCRIPTION =
@@ -20,6 +21,8 @@ export const metadata: Metadata = {
 };
 
 export default function LandingPage() {
+  // CTAs de assinatura só aparecem com a cobrança (modo de teste) configurada no servidor.
+  const billingOn = billingConfig().configured;
   return (
     <div className={s.root} id="topo">
       <a href="#conteudo" className={s.skip}>
@@ -196,7 +199,11 @@ export default function LandingPage() {
           <div className={s.container}>
             <div className={s.sectionHead}>
               <h2 id="planos-title">Planos do ReelsFlow</h2>
-              <p>Proposta para teste comercial. Os valores são mensais e as assinaturas ainda não estão abertas.</p>
+              <p>
+                {billingOn
+                  ? "Valores mensais. Assinaturas em modo de teste (sandbox da Stripe): nenhum valor é cobrado. Preços anuais seguem a definir."
+                  : "Proposta para teste comercial. Os valores são mensais e as assinaturas ainda não estão abertas."}
+              </p>
             </div>
             <ul className={s.plans}>
               {PLANS.map((p) => (
@@ -213,7 +220,17 @@ export default function LandingPage() {
                       <li key={f}>{f}</li>
                     ))}
                   </ul>
-                  <p className={s.planStatus}>Assinaturas ainda não abertas</p>
+                  {p.key === "starter" ? (
+                    <a href="/signup" className={`${s.btn} ${s.btnGhost} ${s.planCta}`}>
+                      Começar grátis
+                    </a>
+                  ) : billingOn ? (
+                    <a href={`/billing/start?plan=${p.key}&interval=month`} className={`${s.btn} ${p.featured ? s.btnPrimary : s.btnGhost} ${s.planCta}`}>
+                      Assinar {p.name} (teste)
+                    </a>
+                  ) : (
+                    <p className={s.planStatus}>Assinaturas ainda não abertas</p>
+                  )}
                 </li>
               ))}
             </ul>
