@@ -69,3 +69,14 @@
 - Webhooks da Zernio não implementados: o status é obtido por consulta (funciona sem eles).
 - Repetir manualmente uma publicação rejeitada por conteúdo, com o mesmo vídeo e legenda, em menos de 24 h
   devolve o mesmo resultado (proteção contra duplicação); altere a legenda ou aguarde.
+
+## Implantação em produção — 2026-11-21 (concluída)
+
+| Etapa | Resultado |
+|---|---|
+| Estado/backup | Tabelas afetadas vazias (0 contas, tokens, campanhas, jobs); estrutura registrada em `supabase/rollback/20261121_rollback_migrations_9_10.sql` (rollback testado localmente com conta vinculada) |
+| Migrations 9 e 10 | Aplicadas e conferidas (10 migrations registradas) |
+| Vínculo | `@pipocoumemes` → workspace Leeoh Nasc, social_account `bef6f5b6-82eb-4461-9048-95378b2b461f`, provider `zernio` |
+| Worker | `worker-tick` v3, bundle do commit `f6d88a6` (sha256 `dac41d0b…`), `zernio_configured: true`, saúde da conta `healthy` |
+| App | Vercel produção (deploy `reelsflow-3vqniynku`) |
+| Verificações | Agendador 7/7 ciclos ok; 0 campanhas ativadas; isolamento confirmado na interface; 0 posts na Zernio |
