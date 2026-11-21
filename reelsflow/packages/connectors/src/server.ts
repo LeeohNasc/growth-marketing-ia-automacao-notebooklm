@@ -7,3 +7,4 @@ export * from "./meta/facebook";
 export * from "./meta/signed-request";
 export * from "./meta/instagram-login";
 export * from "./zernio/client";
+export * from "./zernio/connector";

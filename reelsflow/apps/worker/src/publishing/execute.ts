@@ -13,15 +13,40 @@ export type PublishDeps = {
   workerId: string;
   leaseSeconds: number;
   credentials?: CredentialProvider;
-  /** URL temporária e pública do vídeo (a Meta baixa o arquivo por ela). */
-  mediaUrl?: (storagePath: string) => Promise<string | null>;
+  /** URL temporária e pública do vídeo (a plataforma baixa o arquivo por ela). */
+  mediaUrl?: (storagePath: string, ttlSeconds?: number) => Promise<string | null>;
 };
 
 class LeaseLost extends Error {}
 
+/**
+ * Esperas que NÃO gastam tentativa: a plataforma ainda processa (o conector impõe o prazo total) ou
+ * falta configuração do servidor (chave da Zernio ausente/inválida) — nada a ver com a publicação.
+ */
+const NO_ATTEMPT_WAIT_CODES = new Set(["ig_processing", "zernio_processing", "zernio_not_configured", "zernio_api_key"]);
+/** Validade da URL do vídeo: a Zernio pode segurar o post (limites da rede) antes de baixar o arquivo. */
+const ZERNIO_MEDIA_URL_TTL = 24 * 3600;
+
+const accountInput = (a: Context["account"]) => ({
+  id: a.id,
+  platform: a.platform,
+  externalAccountId: a.external_account_id,
+  settings: a.settings,
+  providerProfileId: a.provider_profile_id ?? null,
+});
+
 type Context = {
   job: { id: string; caption_override: string | null; external_checkpoint: Record<string, unknown> | null };
-  account: { id: string; platform: "instagram" | "facebook" | "tiktok" | "youtube" | "mock"; external_account_id: string; status: string; settings: Record<string, unknown>; display_name: string };
+  account: {
+    id: string;
+    platform: "instagram" | "facebook" | "tiktok" | "youtube" | "mock";
+    external_account_id: string;
+    status: string;
+    settings: Record<string, unknown>;
+    display_name: string;
+    provider?: "native" | "zernio";
+    provider_profile_id?: string | null;
+  };
   media: { storage_path: string; mime_type: string; size_bytes: number; duration_ms: number | null; status: string; deleted_at: string | null; default_caption: string | null; default_hashtags: string[]; name: string } | null;
   campaign: { id: string; name: string; caption: string | null; hashtags: string[]; created_by: string | null } | null;
   target: { caption_override: string | null; hashtags_override: string[] | null } | null;
@@ -137,9 +162,11 @@ async function executeInner(claimed: ClaimedPublication, deps: PublishDeps): Pro
   let phase: Phase | null = null;
   let connector: PublishConnector | undefined;
   try {
-    connector = deps.connectors.get(ctx.account.platform);
-    const credentials = (await deps.credentials?.get(ctx.account)) ?? null;
-    const mediaUrl = ctx.account.platform === "mock" ? null : ((await deps.mediaUrl?.(ctx.media.storage_path)) ?? null);
+    connector = deps.connectors.forAccount(ctx.account);
+    const viaZernio = ctx.account.provider === "zernio";
+    // Contas via Zernio não têm token no ReelsFlow (a chave da Zernio fica no conector).
+    const credentials = viaZernio ? null : ((await deps.credentials?.get(ctx.account)) ?? null);
+    const mediaUrl = ctx.account.platform === "mock" ? null : ((await deps.mediaUrl?.(ctx.media.storage_path, viaZernio ? ZERNIO_MEDIA_URL_TTL : undefined)) ?? null);
     const io = {
       save: async (p: Phase, cp: Record<string, unknown>) => {
         // Persistido ANTES do efeito externo correspondente.
@@ -152,7 +179,7 @@ async function executeInner(claimed: ClaimedPublication, deps: PublishDeps): Pro
       {
         jobId: claimed.id,
         attemptNo: claimed.attempt_count,
-        account: { id: ctx.account.id, platform: ctx.account.platform, externalAccountId: ctx.account.external_account_id, settings: ctx.account.settings },
+        account: accountInput(ctx.account),
         media: { storagePath: ctx.media.storage_path, mimeType: ctx.media.mime_type, sizeBytes: ctx.media.size_bytes, durationMs: ctx.media.duration_ms, url: mediaUrl },
         caption: composed.text,
         checkpoint,
@@ -253,7 +280,7 @@ async function handleFailure(
 
   // A plataforma ainda processa o vídeo (container criado e salvo no checkpoint): volta em
   // ~1 min para o MESMO container sem gastar tentativa. O conector impõe o prazo total.
-  if (err.code === "ig_processing") {
+  if (err.code && NO_ATTEMPT_WAIT_CODES.has(err.code)) {
     const delay = Math.max(30, err.retryAfterSeconds ?? 60);
     await transition(db, claimed.id, workerId, `status = 'failed_retryable', next_attempt_at = now() + make_interval(secs => $5), attempt_count = greatest(attempt_count - 1, 0), ${clear}`, [...base, delay]);
     await finishAttempt(db, a.attemptId, { outcome: "retry", phase: a.phase, err, checkpoint: a.checkpoint });
@@ -310,10 +337,10 @@ export async function reconcileUncertain(deps: Omit<PublishDeps, "leaseSeconds">
     let state: string;
     try {
       const status = j.external_checkpoint
-        ? await deps.connectors.get(ctx.account.platform).getStatus(
-            { id: ctx.account.id, platform: ctx.account.platform, externalAccountId: ctx.account.external_account_id, settings: ctx.account.settings },
+        ? await deps.connectors.forAccount(ctx.account).getStatus(
+            accountInput(ctx.account),
             j.external_checkpoint,
-            (await deps.credentials?.get(ctx.account)) ?? null,
+            ctx.account.provider === "zernio" ? null : ((await deps.credentials?.get(ctx.account)) ?? null),
           )
         : ({ state: "not_found" } as const);
       state = status.state;

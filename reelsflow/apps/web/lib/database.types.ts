@@ -53,6 +53,8 @@ export type SocialAccountRow = {
   id: string; workspace_id: string; platform: SocialPlatform; external_account_id: string; display_name: string;
   avatar_url: string | null; status: "active" | "needs_reauth" | "disconnected"; paused: boolean; min_spacing_minutes: number;
   settings: Json; connected_by: string | null; token_expires_at: string | null; created_at: string; updated_at: string;
+  /** native = conexão direta; zernio = publicada pela Zernio (external_account_id = id da conta na Zernio). */
+  provider: "native" | "zernio"; provider_profile_id: string | null;
 };
 export type TemplateRow = {
   id: string; workspace_id: string; name: string; mode: "mirrored" | "independent"; timezone: string; weekdays: number[]; times: string[];

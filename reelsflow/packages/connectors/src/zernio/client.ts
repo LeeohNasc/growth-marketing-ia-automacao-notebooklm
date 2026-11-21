@@ -36,6 +36,41 @@ export type ZernioAccount = {
   profilePicture?: string;
 };
 
+export type ZernioPostTarget = {
+  platform: string;
+  accountId: string | { _id: string };
+  status?: string;
+  platformPostId?: string;
+  platformPostUrl?: string | null;
+  publishedAt?: string;
+  errorMessage?: string;
+  errorCategory?: string;
+  errorSource?: string;
+};
+
+export type ZernioPost = {
+  _id: string;
+  status: "draft" | "pending_approval" | "scheduled" | "publishing" | "published" | "partial" | "failed" | "cancelled" | string;
+  externalId?: string | null;
+  profileId?: string | { _id: string };
+  platforms: ZernioPostTarget[];
+  createdAt?: string;
+};
+
+export type CreatePostInput = {
+  content?: string;
+  mediaItems: { type: "video" | "image"; url: string }[];
+  platforms: { platform: ZernioPlatform; accountId: string; platformSpecificData?: Record<string, unknown> }[];
+  profileId?: string;
+  publishNow?: boolean;
+  scheduledFor?: string;
+  timezone?: string;
+  externalId?: string;
+};
+
+/** Normaliza campos que a API devolve como id ou como objeto populado. */
+export const zernioId = (v: string | { _id: string } | undefined | null): string | null => (v == null ? null : typeof v === "string" ? v : v._id);
+
 /** Erro da API. `type`/`code` são estáveis; `message` é texto humano (não ramificar por ele). */
 export class ZernioApiError extends Error {
   constructor(
@@ -183,6 +218,46 @@ export class ZernioClient {
 
   async disconnectAccount(accountId: string): Promise<void> {
     await this.request("DELETE", `accounts/${encodeURIComponent(accountId)}`);
+  }
+
+  async getAccount(accountId: string): Promise<ZernioAccount> {
+    const r = await this.request<{ account: ZernioAccount }>("GET", `accounts/${encodeURIComponent(accountId)}`);
+    return r.account;
+  }
+
+  /** Saúde de todas as contas (canPost, needsReconnect). Uma chamada para todas. */
+  async accountsHealth(): Promise<{ accountId: string; canPost?: boolean; needsReconnect?: boolean; status?: string; tokenExpiresAt?: string | null }[]> {
+    const r = await this.request<{ accounts?: { accountId: string; canPost?: boolean; needsReconnect?: boolean; status?: string; tokenExpiresAt?: string | null }[] }>("GET", "accounts/health");
+    return r.accounts ?? [];
+  }
+
+  // ---------------------------------------------------------------- posts
+
+  /**
+   * Cria o post. `idempotencyKey`: repetir com a mesma chave em 24 h devolve o post original
+   * (HTTP 200) em vez de criar outro. 207 é 2xx mesmo com falha: decida por post.status.
+   */
+  async createPost(input: CreatePostInput, idempotencyKey: string): Promise<ZernioPost> {
+    const r = await this.request<{ post: ZernioPost }>("POST", "posts", { body: input, idempotencyKey });
+    if (!r?.post?._id) throw new ZernioApiError("Resposta da Zernio sem post.", 502, "api_error", "missing_post", null, null, null);
+    return r.post;
+  }
+
+  async getPost(postId: string): Promise<ZernioPost> {
+    const r = await this.request<{ post: ZernioPost }>("GET", `posts/${encodeURIComponent(postId)}`);
+    return r.post;
+  }
+
+  /** Localiza o post pelo nosso identificador (GET /v1/posts?externalId=). */
+  async findPostByExternalId(externalId: string): Promise<ZernioPost | null> {
+    const r = await this.request<{ posts?: ZernioPost[] }>("GET", "posts", { query: { externalId, limit: 5, includeHidden: true } });
+    return (r.posts ?? []).find((p) => p.externalId === externalId) ?? null;
+  }
+
+  /** Reexecuta só as plataformas que falharam (POST /v1/posts/{id}/retry). */
+  async retryPost(postId: string): Promise<ZernioPost | null> {
+    const r = await this.request<{ post?: ZernioPost }>("POST", `posts/${encodeURIComponent(postId)}/retry`);
+    return r?.post ?? null;
   }
 }
 

@@ -40,6 +40,7 @@ type Acc = {
   username: string | null;
   avatar_url: string | null;
   token_expires_at: string | null;
+  provider: "native" | "zernio";
   platform: string;
   status: string;
   paused: boolean;
@@ -79,12 +80,19 @@ export function AccountRow({ slug, acc, canManage, metaEnabled, igEnabled }: { s
           {acc.username && <span className="text-xs text-muted-foreground">@{acc.username}</span>}
         </span>
         {acc.status === "active" && acc.platform !== "mock" && <Badge variant="success">Conectada</Badge>}
+        {acc.provider === "zernio" && <Badge variant="outline">via Zernio</Badge>}
         <Badge variant={acc.platform === "mock" ? "warning" : "secondary"}>{PLATFORM_NAME[acc.platform] ?? acc.platform}</Badge>
         {acc.status === "needs_reauth" && <Badge variant="outline" className="border-destructive text-destructive">Requer reconexão</Badge>}
         {acc.status === "disconnected" && <Badge variant="outline">Desconectada</Badge>}
         {acc.paused && <Badge variant="secondary">Pausada</Badge>}
       </div>
-      {acc.platform === "instagram" && acc.token_expires_at && acc.status === "active" && (
+      {acc.provider === "zernio" && acc.status === "needs_reauth" && (
+        <p className="text-xs text-destructive">
+          A Zernio informou que esta conta precisa ser reconectada. Reconecte-a no painel da Zernio; o ReelsFlow volta a publicar sozinho em até
+          10 minutos.
+        </p>
+      )}
+      {acc.provider === "native" && acc.platform === "instagram" && acc.token_expires_at && acc.status === "active" && (
         <p className="text-xs text-muted-foreground">
           Autorização válida até {dateFmt.format(new Date(acc.token_expires_at))} · renovada automaticamente antes de vencer.
         </p>
@@ -100,7 +108,8 @@ export function AccountRow({ slug, acc, canManage, metaEnabled, igEnabled }: { s
       )}
       {canManage && acc.platform !== "mock" && (
         <div className="flex flex-wrap gap-2">
-          {(acc.status !== "active" || acc.capabilities.some((c) => !c.granted)) &&
+          {acc.provider === "native" &&
+            (acc.status !== "active" || acc.capabilities.some((c) => !c.granted)) &&
             (acc.platform === "instagram" ? igEnabled : metaEnabled) && (
               <Button asChild size="sm">
                 <a href={acc.platform === "instagram" ? `/api/oauth/instagram/start?w=${slug}` : `/api/oauth/meta/start?w=${slug}&rerequest=1`}>Reconectar</a>

@@ -128,6 +128,7 @@ export default async function AccountsPage({ params, searchParams }: { params: P
                     username: ((a.settings as { username?: string }) ?? {}).username ?? null,
                     avatar_url: a.avatar_url,
                     token_expires_at: a.token_expires_at,
+                    provider: a.provider,
                     platform: a.platform,
                     status: a.status,
                     paused: a.paused,

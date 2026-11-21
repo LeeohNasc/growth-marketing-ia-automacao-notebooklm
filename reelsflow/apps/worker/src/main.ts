@@ -1,6 +1,6 @@
 import pg from "pg";
 import { ConnectorRegistry, MockConnector } from "@reelsflow/connectors";
-import { FacebookConnector, GraphClient, InstagramConnector, TokenCipher } from "@reelsflow/connectors/server";
+import { FacebookConnector, GraphClient, InstagramConnector, TokenCipher, ZernioClient, ZernioConnector } from "@reelsflow/connectors/server";
 import { PgCredentialProvider } from "./publishing/credentials";
 import { PgMockStore } from "./publishing/store";
 import { loadConfig } from "./config";
@@ -18,6 +18,10 @@ const connectors = new ConnectorRegistry()
   .register(new MockConnector(new PgMockStore(db)))
   .register(new InstagramConnector(graph))
   .register(new FacebookConnector(graph));
+// Zernio: só com ZERNIO_API_KEY (somente servidor). Sem ela, contas via Zernio aguardam na fila.
+const zernio = process.env.ZERNIO_API_KEY ? ZernioClient.fromEnv() : null;
+if (zernio) connectors.register(new ZernioConnector(zernio));
+else log.warn("ZERNIO_API_KEY not configured; publications through Zernio will wait");
 let cipher: TokenCipher | null = null;
 try {
   cipher = TokenCipher.fromEnv();
@@ -26,7 +30,7 @@ try {
 }
 const credentials = new PgCredentialProvider(db, cipher);
 // 2 h: tempo para a Meta baixar e processar o vídeo; a URL expira depois.
-const mediaUrl = (p: string) => storage.signedUrl(p, 2 * 3600);
+const mediaUrl = (p: string, ttl?: number) => storage.signedUrl(p, ttl ?? 2 * 3600);
 
 for (const sig of ["SIGINT", "SIGTERM"] as const) {
   process.on(sig, () => {
@@ -37,7 +41,7 @@ for (const sig of ["SIGINT", "SIGTERM"] as const) {
 
 log.info("worker started", { concurrency: config.WORKER_CONCURRENCY });
 await runLoop(
-  { db, storage, log, connectors, credentials, mediaUrl, instagramTokens: { cipher, graph }, ffmpeg: { ffprobe: config.FFPROBE_PATH, ffmpeg: config.FFMPEG_PATH }, tmpDir: config.WORKER_TMP_DIR },
+  { db, storage, log, connectors, credentials, mediaUrl, instagramTokens: { cipher, graph }, zernio, ffmpeg: { ffprobe: config.FFPROBE_PATH, ffmpeg: config.FFMPEG_PATH }, tmpDir: config.WORKER_TMP_DIR },
   { workerId: config.WORKER_ID, concurrency: config.WORKER_CONCURRENCY, leaseSeconds: config.WORKER_LEASE_SECONDS, pollMs: config.WORKER_POLL_MS },
   controller.signal,
 );

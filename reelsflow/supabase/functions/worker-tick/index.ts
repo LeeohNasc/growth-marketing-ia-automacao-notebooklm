@@ -45,6 +45,8 @@ Deno.serve(async (req) => {
     tokenEncryptionKey: Deno.env.get("TOKEN_ENCRYPTION_KEY") || undefined,
     graphVersion: Deno.env.get("META_GRAPH_VERSION") || undefined,
     simulatedAccounts: Deno.env.get("ENABLE_SIMULATED_ACCOUNTS") !== "false",
+    // Segredo da Edge Function (Supabase → Edge Functions → Secrets). Nunca no código nem no navegador.
+    zernioApiKey: Deno.env.get("ZERNIO_API_KEY") || undefined,
   };
   if (!env.databaseUrl || !env.supabaseUrl || !env.serviceRoleKey) {
     return new Response("missing runtime env", { status: 500 });

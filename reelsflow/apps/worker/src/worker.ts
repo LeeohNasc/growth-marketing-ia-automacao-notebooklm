@@ -4,7 +4,8 @@ import { appendFromCollections, completeCampaigns, lowContentAlerts } from "./pu
 import type { CredentialProvider } from "./publishing/credentials";
 import { executePublication, reconcileUncertain } from "./publishing/execute";
 import { maintainInstagramTokens } from "./publishing/tokens";
-import type { GraphClient, TokenCipher } from "@reelsflow/connectors/server";
+import { syncZernioAccounts } from "./publishing/zernio-accounts";
+import type { GraphClient, TokenCipher, ZernioClient } from "@reelsflow/connectors/server";
 import { claimPublications, promoteDue, reapPublicationLeases } from "./publishing/scheduler";
 import { handlePurge } from "./handlers/purge";
 import { handleProbe } from "./handlers/probe";
@@ -43,9 +44,11 @@ export async function runJob(job: MediaJob, deps: HandlerDeps, opts: Pick<Worker
 export type WorkerDeps = HandlerDeps & {
   connectors?: ConnectorRegistry;
   credentials?: CredentialProvider;
-  mediaUrl?: (storagePath: string) => Promise<string | null>;
+  mediaUrl?: (storagePath: string, ttlSeconds?: number) => Promise<string | null>;
   /** Renovação dos tokens do Instagram Login (60 dias) durante a manutenção. */
   instagramTokens?: { cipher: TokenCipher | null; graph: GraphClient };
+  /** Cliente da Zernio (presente quando ZERNIO_API_KEY está configurada). */
+  zernio?: ZernioClient | null;
 };
 
 /**
@@ -67,6 +70,13 @@ export async function tick(deps: WorkerDeps, opts: WorkerOptions, state: { lastM
       await appendFromCollections(deps.db, deps.log);
       await lowContentAlerts(deps.db);
       await completeCampaigns(deps.db);
+    }
+    if (deps.zernio) {
+      try {
+        await syncZernioAccounts(deps.db, { zernio: deps.zernio, log: deps.log });
+      } catch (e) {
+        deps.log.error("zernio account sync failed", { error: String(e) });
+      }
     }
     if (deps.instagramTokens) {
       try {

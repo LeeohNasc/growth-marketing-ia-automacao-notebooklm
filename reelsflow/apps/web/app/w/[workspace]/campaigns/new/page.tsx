@@ -13,7 +13,7 @@ export default async function NewCampaignPage({ params }: { params: Promise<{ wo
   const supabase = await createClient();
   const [{ data: templates }, { data: accounts }, { data: videos }, { data: collections }, { data: items }] = await Promise.all([
     supabase.from("publication_templates").select("*").eq("workspace_id", workspace.id).order("name"),
-    supabase.from("social_accounts").select("id, display_name, platform, status, paused, settings").eq("workspace_id", workspace.id).order("display_name"),
+    supabase.from("social_accounts").select("id, display_name, platform, status, paused, settings, provider").eq("workspace_id", workspace.id).order("display_name"),
     supabase
       .from("media_assets")
       .select("id, name, duration_ms, compatibility, thumbnail_path, created_at")

@@ -4,13 +4,22 @@
  * primeiro conector real; nesta fase o contrato cobre publicar e consultar.
  */
 export type ConnectorPlatform = "instagram" | "facebook" | "tiktok" | "youtube" | "mock";
+/** Chave de roteamento no registro: a plataforma, ou o provedor intermediário (ex.: "zernio"). */
+export type ConnectorKey = ConnectorPlatform | "zernio";
 
 export type Phase = "uploading" | "processing_remote" | "publishing";
 
 export type PublishInput = {
   jobId: string;
   attemptNo: number;
-  account: { id: string; platform: ConnectorPlatform; externalAccountId: string; settings: Record<string, unknown> };
+  account: {
+    id: string;
+    platform: ConnectorPlatform;
+    externalAccountId: string;
+    settings: Record<string, unknown>;
+    /** Perfil do provedor que deve conter a conta (contas via Zernio). */
+    providerProfileId?: string | null;
+  };
   media: { storagePath: string; mimeType: string; sizeBytes: number; durationMs: number | null; url?: string | null };
   /** Credenciais decifradas pelo worker (nunca persistidas em claro). Ausente no conector simulado. */
   credentials?: { accessToken: string } | null;
@@ -55,7 +64,7 @@ export class ConnectorError extends Error {
 }
 
 export interface PublishConnector {
-  readonly platform: ConnectorPlatform;
+  readonly platform: ConnectorKey;
   publish(input: PublishInput, io: CheckpointIO): Promise<PublishResult>;
   getStatus(account: PublishInput["account"], checkpoint: Record<string, unknown>, credentials?: PublishInput["credentials"]): Promise<RemoteStatus>;
 }

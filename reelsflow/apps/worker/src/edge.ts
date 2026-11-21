@@ -7,7 +7,7 @@
  * não dependa de como o runtime resolve pacotes npm.
  */
 import { ConnectorRegistry, MockConnector } from "@reelsflow/connectors";
-import { FacebookConnector, GraphClient, InstagramConnector, TokenCipher } from "@reelsflow/connectors/server";
+import { FacebookConnector, GraphClient, InstagramConnector, TokenCipher, ZernioClient, ZernioConnector } from "@reelsflow/connectors/server";
 import { POSTGRES_JS_OPTIONS, postgresJsDb } from "./db";
 import { createLogger } from "./log";
 import { PgCredentialProvider } from "./publishing/credentials";
@@ -21,6 +21,8 @@ export type EdgeEnv = {
   serviceRoleKey: string;
   tokenEncryptionKey?: string;
   graphVersion?: string;
+  /** Chave da Zernio (segredo da Edge Function). Sem ela, contas via Zernio aguardam na fila. */
+  zernioApiKey?: string;
   /** Simulador de publicação ligado (padrão: sim, enquanto não houver app Meta aprovado). */
   simulatedAccounts?: boolean;
 };
@@ -39,6 +41,10 @@ export async function runEdgeTick(env: EdgeEnv, postgres: PostgresFactory, invoc
     .register(new InstagramConnector(graph, { pollIntervalMs: 10_000, pollBudgetMs: 40_000 }))
     .register(new FacebookConnector(graph));
   if (env.simulatedAccounts !== false) connectors.register(new MockConnector(new PgMockStore(db)));
+  const zernio = env.zernioApiKey ? new ZernioClient({ apiKey: env.zernioApiKey }) : null;
+  // Espera curta (limite de tempo da Edge Function); se a Zernio ainda estiver publicando,
+  // o próximo tick (1 min) consulta o MESMO post, sem gastar tentativa.
+  if (zernio) connectors.register(new ZernioConnector(zernio, { pollBudgetMs: 40_000, pollIntervalMs: 10_000 }));
   let cipher: TokenCipher | null = null;
   if (env.tokenEncryptionKey) {
     try {
@@ -65,7 +71,8 @@ export async function runEdgeTick(env: EdgeEnv, postgres: PostgresFactory, invoc
         connectors,
         credentials: new PgCredentialProvider(db, cipher),
         instagramTokens: { cipher, graph },
-        mediaUrl: (p) => storage.signedUrl(p, 2 * 3600),
+        zernio,
+        mediaUrl: (p, ttl) => storage.signedUrl(p, ttl ?? 2 * 3600),
         ffmpeg: { ffprobe: "ffprobe", ffmpeg: "ffmpeg" },
         tmpDir: "/tmp",
         probeMode: "remote",

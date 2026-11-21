@@ -93,10 +93,20 @@ var ConnectorRegistry = class {
     this.map.set(c.platform, c);
     return this;
   }
-  get(platform) {
-    const c = this.map.get(platform);
-    if (!c) throw new ConnectorError("permanent", `Conector ${platform} indispon\xEDvel.`, { code: "connector_unavailable" });
+  get(key) {
+    const c = this.map.get(key);
+    if (!c) throw new ConnectorError("permanent", `Conector ${key} indispon\xEDvel.`, { code: "connector_unavailable" });
     return c;
+  }
+  /** Conta conectada por um provedor intermediário (provider = "zernio") usa o conector dele. */
+  forAccount(account) {
+    if (account.provider === "zernio" && !this.map.has("zernio")) {
+      throw new ConnectorError("transient", "Integra\xE7\xE3o com a Zernio n\xE3o configurada no worker (ZERNIO_API_KEY).", {
+        code: "zernio_not_configured",
+        retryAfterSeconds: 900
+      });
+    }
+    return this.get(account.provider === "zernio" ? "zernio" : account.platform);
   }
 };
 
@@ -542,6 +552,336 @@ var FacebookConnector = class {
 
 // ../../packages/connectors/src/meta/signed-request.ts
 import { createHmac, timingSafeEqual } from "node:crypto";
+
+// ../../packages/connectors/src/zernio/client.ts
+var ZERNIO_BASE_URL = "https://zernio.com/api/v1";
+var ZERNIO_SOCIAL_PLATFORMS = ["instagram", "facebook", "tiktok", "youtube"];
+var zernioId = (v) => v == null ? null : typeof v === "string" ? v : v._id;
+var ZernioApiError = class extends Error {
+  constructor(message, status, type, code, details, requestId, retryAfterSeconds) {
+    super(message);
+    this.status = status;
+    this.type = type;
+    this.code = code;
+    this.details = details;
+    this.requestId = requestId;
+    this.retryAfterSeconds = retryAfterSeconds;
+    this.name = "ZernioApiError";
+  }
+  status;
+  type;
+  code;
+  details;
+  requestId;
+  retryAfterSeconds;
+  /** 408/429/5xx e falhas de rede podem ser repetidas; 4xx de validação/permissão não. */
+  get retryable() {
+    return this.status === 0 || this.status === 408 || this.status === 429 || this.status >= 500;
+  }
+};
+var ZernioClient = class _ZernioClient {
+  apiKey;
+  baseUrl;
+  fetchImpl;
+  timeoutMs;
+  constructor(opts) {
+    if (!opts.apiKey || !opts.apiKey.trim()) throw new Error("ZERNIO_API_KEY n\xE3o configurada.");
+    this.apiKey = opts.apiKey.trim();
+    this.baseUrl = (opts.baseUrl ?? ZERNIO_BASE_URL).replace(/\/$/, "");
+    this.fetchImpl = opts.fetchImpl ?? fetch;
+    this.timeoutMs = opts.timeoutMs ?? 3e4;
+  }
+  /** Lê a chave de ZERNIO_API_KEY (somente servidor). */
+  static fromEnv(env = process.env, opts = {}) {
+    const apiKey = env.ZERNIO_API_KEY;
+    if (!apiKey) throw new Error("ZERNIO_API_KEY n\xE3o configurada.");
+    return new _ZernioClient({ ...opts, apiKey });
+  }
+  async request(method, path3, opts = {}) {
+    const url = new URL(`${this.baseUrl}/${path3.replace(/^\//, "")}`);
+    for (const [k, v] of Object.entries(opts.query ?? {})) if (v !== void 0 && v !== null) url.searchParams.set(k, String(v));
+    const headers = { Authorization: `Bearer ${this.apiKey}`, Accept: "application/json" };
+    if (opts.body !== void 0) headers["Content-Type"] = "application/json";
+    if (opts.idempotencyKey) headers["Idempotency-Key"] = opts.idempotencyKey;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), this.timeoutMs);
+    let res;
+    try {
+      res = await this.fetchImpl(url, { method, headers, body: opts.body === void 0 ? void 0 : JSON.stringify(opts.body), signal: ctrl.signal });
+    } catch (e) {
+      const timeout = e?.name === "AbortError";
+      throw new ZernioApiError(timeout ? "Tempo esgotado ao chamar a Zernio." : "Falha de rede ao chamar a Zernio.", 0, timeout ? "timeout" : "network_error", null, null, null, null);
+    } finally {
+      clearTimeout(timer);
+    }
+    const text = await res.text();
+    let json = null;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+    }
+    if (!res.ok) {
+      const e = json ?? {};
+      const retryAfter = Number(res.headers.get("retry-after"));
+      throw new ZernioApiError(
+        redact(e.error ?? `HTTP ${res.status}`, this.apiKey),
+        res.status,
+        e.type ?? null,
+        e.code ?? null,
+        e.details ?? null,
+        res.headers.get("x-request-id"),
+        Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null
+      );
+    }
+    return json;
+  }
+  // ---------------------------------------------------------------- perfis
+  async listProfiles(filter = {}) {
+    const r = await this.request("GET", "profiles", { query: filter });
+    return r.profiles ?? [];
+  }
+  async createProfile(input) {
+    const r = await this.request("POST", "profiles", { body: input });
+    return r.profile;
+  }
+  /**
+   * Perfil idempotente por `externalId` (id do tenant no ReelsFlow): procura, senão cria.
+   * Corrida entre duas criações: a API responde 409 com details.existingProfileId — reaproveita.
+   */
+  async ensureProfile(input) {
+    const found = (await this.listProfiles({ externalId: input.externalId })).find((p) => p.externalId === input.externalId);
+    if (found) return { profile: found, created: false };
+    try {
+      return { profile: await this.createProfile(input), created: true };
+    } catch (e) {
+      const existing = e instanceof ZernioApiError && e.status === 409 ? e.details?.existingProfileId : void 0;
+      if (typeof existing === "string") {
+        const again = (await this.listProfiles({ externalId: input.externalId }))[0];
+        return { profile: again ?? { _id: existing, name: input.name, externalId: input.externalId }, created: false };
+      }
+      throw e;
+    }
+  }
+  // ---------------------------------------------------------------- conexão de contas
+  /**
+   * Link de autorização hospedado pela Zernio (GET /v1/connect/{platform}). O usuário abre o
+   * `authUrl`, autoriza na rede social e volta para `redirectUrl` com
+   * connected/profileId/accountId/username (ou error/error_message).
+   */
+  async getConnectUrl(platform, profileId, opts = {}) {
+    if (!ZERNIO_SOCIAL_PLATFORMS.includes(platform)) throw new Error(`Plataforma n\xE3o suportada: ${platform}`);
+    const r = await this.request("GET", `connect/${platform}`, {
+      query: { profileId, redirect_url: opts.redirectUrl }
+    });
+    if (!r?.authUrl) throw new ZernioApiError("Resposta da Zernio sem authUrl.", 502, "api_error", "missing_auth_url", null, null, null);
+    return r;
+  }
+  async listAccounts(profileId) {
+    const r = await this.request("GET", "accounts", { query: { profileId } });
+    return r.accounts ?? [];
+  }
+  async disconnectAccount(accountId) {
+    await this.request("DELETE", `accounts/${encodeURIComponent(accountId)}`);
+  }
+  async getAccount(accountId) {
+    const r = await this.request("GET", `accounts/${encodeURIComponent(accountId)}`);
+    return r.account;
+  }
+  /** Saúde de todas as contas (canPost, needsReconnect). Uma chamada para todas. */
+  async accountsHealth() {
+    const r = await this.request("GET", "accounts/health");
+    return r.accounts ?? [];
+  }
+  // ---------------------------------------------------------------- posts
+  /**
+   * Cria o post. `idempotencyKey`: repetir com a mesma chave em 24 h devolve o post original
+   * (HTTP 200) em vez de criar outro. 207 é 2xx mesmo com falha: decida por post.status.
+   */
+  async createPost(input, idempotencyKey) {
+    const r = await this.request("POST", "posts", { body: input, idempotencyKey });
+    if (!r?.post?._id) throw new ZernioApiError("Resposta da Zernio sem post.", 502, "api_error", "missing_post", null, null, null);
+    return r.post;
+  }
+  async getPost(postId) {
+    const r = await this.request("GET", `posts/${encodeURIComponent(postId)}`);
+    return r.post;
+  }
+  /** Localiza o post pelo nosso identificador (GET /v1/posts?externalId=). */
+  async findPostByExternalId(externalId) {
+    const r = await this.request("GET", "posts", { query: { externalId, limit: 5, includeHidden: true } });
+    return (r.posts ?? []).find((p) => p.externalId === externalId) ?? null;
+  }
+  /** Reexecuta só as plataformas que falharam (POST /v1/posts/{id}/retry). */
+  async retryPost(postId) {
+    const r = await this.request("POST", `posts/${encodeURIComponent(postId)}/retry`);
+    return r?.post ?? null;
+  }
+};
+function redact(message, key) {
+  return key ? message.split(key).join("[redacted]") : message;
+}
+
+// ../../packages/connectors/src/zernio/connector.ts
+var TRANSIENT_CATEGORIES = /* @__PURE__ */ new Set(["platform_error", "platform_rate_limit", "quota_exhausted", "system_error"]);
+var AUTH_CATEGORIES = /* @__PURE__ */ new Set(["auth_expired", "account_issue"]);
+var PENDING_STATES = /* @__PURE__ */ new Set(["pending", "processing", "uploading", "publishing", "scheduled"]);
+var zernioJobKey = (jobId) => `reelsflow-job-${jobId}`;
+var ZernioConnector = class {
+  constructor(client, opts = {}) {
+    this.client = client;
+    this.pollBudgetMs = opts.pollBudgetMs ?? 6e4;
+    this.pollIntervalMs = opts.pollIntervalMs ?? 1e4;
+    this.processingDeadlineMs = opts.processingDeadlineMs ?? 6 * 36e5;
+    this.maxRemoteRetries = opts.maxRemoteRetries ?? 3;
+    this.sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
+    this.now = opts.now ?? Date.now;
+  }
+  client;
+  platform = "zernio";
+  pollBudgetMs;
+  pollIntervalMs;
+  processingDeadlineMs;
+  maxRemoteRetries;
+  sleep;
+  now;
+  async publish(input, io) {
+    const key = zernioJobKey(input.jobId);
+    const prev = input.checkpoint ?? {};
+    let cp = { provider: "zernio", idempotency_key: key, ...prev };
+    const platform = input.account.platform;
+    let post;
+    if (cp.zernio_post_id) {
+      post = await this.call(() => this.client.getPost(cp.zernio_post_id), false);
+    } else {
+      await this.assertAccount(input);
+      if (!input.media.url) throw new ConnectorError("transient", "URL tempor\xE1ria do v\xEDdeo indispon\xEDvel.", { code: "media_url" });
+      cp = { ...cp, requested_at: cp.requested_at ?? this.now() };
+      await io.save("publishing", cp);
+      post = await this.call(
+        () => this.client.createPost(
+          {
+            content: input.caption || void 0,
+            mediaItems: [{ type: "video", url: input.media.url }],
+            platforms: [{ platform, accountId: input.account.externalAccountId, ...platform === "instagram" ? { platformSpecificData: { shareToFeed: true } } : {} }],
+            profileId: input.account.providerProfileId ?? void 0,
+            publishNow: true,
+            externalId: key
+          },
+          key
+        ),
+        true
+      );
+      cp = { ...cp, zernio_post_id: post._id };
+      await io.save("publishing", cp);
+    }
+    const deadline = this.now() + this.pollBudgetMs;
+    for (; ; ) {
+      const target = this.target(post, input.account.externalAccountId);
+      const outcome = await this.evaluate(post, target, cp, io);
+      if (outcome.kind === "published") return outcome.result;
+      if (outcome.kind === "retried") {
+        cp = outcome.cp;
+        post = outcome.post ?? post;
+      }
+      if (this.now() - (cp.requested_at ?? this.now()) > this.processingDeadlineMs) {
+        throw new ConnectorError("unknown", "A Zernio ainda n\xE3o confirmou a publica\xE7\xE3o; acompanhamento continua pela reconcilia\xE7\xE3o.", {
+          code: "zernio_unresolved",
+          sideEffectStarted: true
+        });
+      }
+      if (this.now() >= deadline) {
+        throw new ConnectorError("transient", target?.errorMessage ? `Aguardando a Zernio: ${target.errorMessage}` : "Publica\xE7\xE3o em andamento na Zernio; nova verifica\xE7\xE3o em instantes.", {
+          code: "zernio_processing",
+          retryAfterSeconds: 60
+        });
+      }
+      await this.sleep(this.pollIntervalMs);
+      post = await this.call(() => this.client.getPost(cp.zernio_post_id), false);
+    }
+  }
+  /** Conta existe, está ativa, é da plataforma certa e pertence ao perfil vinculado ao workspace. */
+  async assertAccount(input) {
+    if (!input.account.providerProfileId) {
+      throw new ConnectorError("permanent", "Conta Zernio sem perfil vinculado. Nada foi publicado.", { code: "zernio_profile_missing" });
+    }
+    const acc = await this.call(() => this.client.getAccount(input.account.externalAccountId), false);
+    if (zernioId(acc.profileId) !== input.account.providerProfileId || acc.platform !== input.account.platform) {
+      throw new ConnectorError("permanent", "A conta na Zernio n\xE3o pertence ao perfil deste workspace. Nada foi publicado.", { code: "zernio_account_mismatch" });
+    }
+    if (acc.isActive === false) throw new ConnectorError("auth", "Conta desativada na Zernio. Reconecte a conta.", { code: "zernio_account_inactive" });
+  }
+  target(post, accountId) {
+    return post.platforms?.find((t) => zernioId(t.accountId) === accountId) ?? (post.platforms?.length === 1 ? post.platforms[0] : void 0);
+  }
+  async evaluate(post, target, cp, io) {
+    const st = target?.status ?? (post.status === "published" ? "published" : post.status);
+    if (st === "published") {
+      return { kind: "published", result: { externalId: target?.platformPostId || `zernio:${post._id}`, permalink: target?.platformPostUrl || null } };
+    }
+    if (st === "cancelled" || post.status === "cancelled") {
+      throw new ConnectorError("permanent", "O post foi cancelado na Zernio. Nada foi publicado.", { code: "zernio_cancelled" });
+    }
+    if (st === "failed" || post.status === "failed") {
+      const cat = target?.errorCategory ?? "unknown";
+      const msg = target?.errorMessage ? `Instagram/Zernio: ${target.errorMessage}` : "A Zernio informou falha na publica\xE7\xE3o.";
+      if (AUTH_CATEGORIES.has(cat)) throw new ConnectorError("auth", `${msg} Reconecte a conta na Zernio.`, { code: `zernio_${cat}` });
+      if (TRANSIENT_CATEGORIES.has(cat) && (cp.remote_retries ?? 0) < this.maxRemoteRetries) {
+        const next = { ...cp, remote_retries: (cp.remote_retries ?? 0) + 1 };
+        await io.save("publishing", next);
+        const again = await this.call(() => this.client.retryPost(post._id), false);
+        return { kind: "retried", cp: next, post: again };
+      }
+      throw new ConnectorError("permanent", msg, { code: `zernio_${cat}` });
+    }
+    if (PENDING_STATES.has(st) || post.status === "partial") return { kind: "pending" };
+    return { kind: "pending" };
+  }
+  /** Converte erros HTTP da Zernio. `sideEffect`: a chamada pode ter criado o post. */
+  async call(fn, sideEffect) {
+    try {
+      return await fn();
+    } catch (e) {
+      throw classifyZernioError(e, sideEffect);
+    }
+  }
+  async getStatus(account, checkpoint) {
+    const cp = checkpoint;
+    try {
+      const post = cp.zernio_post_id ? await this.client.getPost(cp.zernio_post_id) : cp.idempotency_key ? await this.client.findPostByExternalId(cp.idempotency_key) : null;
+      if (!post) return { state: "not_found" };
+      const t = this.target(post, account.externalAccountId);
+      const st = t?.status ?? post.status;
+      if (st === "published") return { state: "published", externalId: t?.platformPostId || `zernio:${post._id}`, permalink: t?.platformPostUrl || null };
+      if (st === "failed" || st === "cancelled") return { state: "not_found" };
+      return { state: "processing" };
+    } catch {
+      return { state: "unknown" };
+    }
+  }
+};
+function classifyZernioError(e, sideEffect) {
+  if (e instanceof ConnectorError) return e;
+  if (!(e instanceof ZernioApiError)) {
+    return new ConnectorError(sideEffect ? "unknown" : "transient", e instanceof Error ? e.message : String(e), { sideEffectStarted: sideEffect });
+  }
+  const tag = `zernio_${e.code ?? e.status}`;
+  const opts = { code: tag, retryAfterSeconds: e.retryAfterSeconds ?? void 0 };
+  if (e.status === 0 || e.status >= 500) {
+    return sideEffect ? new ConnectorError(e.type === "timeout" ? "timeout" : "unknown", e.message, { ...opts, sideEffectStarted: true }) : new ConnectorError("transient", e.message, opts);
+  }
+  if (e.status === 429) return new ConnectorError("rate_limited", e.message, { ...opts, retryAfterSeconds: e.retryAfterSeconds ?? 60 });
+  if (e.status === 409 && e.code === "idempotency_conflict") {
+    return new ConnectorError("transient", e.message, { ...opts, retryAfterSeconds: e.retryAfterSeconds ?? 30 });
+  }
+  if (e.status === 409 && e.code === "duplicate_content") {
+    return new ConnectorError("permanent", "Este v\xEDdeo com a mesma legenda j\xE1 foi enviado a esta conta nas \xFAltimas 24 h. Nada foi publicado de novo.", opts);
+  }
+  if (e.status === 401) return new ConnectorError("transient", "Chave da Zernio inv\xE1lida ou ausente no servidor.", { ...opts, code: "zernio_api_key", retryAfterSeconds: 900 });
+  if (e.status === 402) return new ConnectorError("transient", "A Zernio exige pagamento para esta opera\xE7\xE3o (limite do plano).", { ...opts, retryAfterSeconds: 3600 });
+  if (e.status === 403 && /DISCONNECTED|disconnected/.test(`${e.code} ${e.message}`)) return new ConnectorError("auth", "Conta desconectada na Zernio. Reconecte a conta.", opts);
+  if (e.status === 404) return new ConnectorError("auth", "Conta ou post n\xE3o encontrado na Zernio.", opts);
+  return new ConnectorError("permanent", e.message, opts);
+}
 
 // src/db.ts
 function postgresJsDb(sql) {
@@ -1271,6 +1611,15 @@ async function completeCampaigns(db, now = /* @__PURE__ */ new Date()) {
 // src/publishing/execute.ts
 var LeaseLost = class extends Error {
 };
+var NO_ATTEMPT_WAIT_CODES = /* @__PURE__ */ new Set(["ig_processing", "zernio_processing", "zernio_not_configured", "zernio_api_key"]);
+var ZERNIO_MEDIA_URL_TTL = 24 * 3600;
+var accountInput = (a) => ({
+  id: a.id,
+  platform: a.platform,
+  externalAccountId: a.external_account_id,
+  settings: a.settings,
+  providerProfileId: a.provider_profile_id ?? null
+});
 async function loadContext(db, jobId) {
   const { rows } = await db.query(
     `select row_to_json(j.*) as job, row_to_json(a.*) as account, row_to_json(m.*) as media, row_to_json(c.*) as campaign,
@@ -1361,9 +1710,10 @@ async function executeInner(claimed, deps) {
   let phase = null;
   let connector;
   try {
-    connector = deps.connectors.get(ctx.account.platform);
-    const credentials = await deps.credentials?.get(ctx.account) ?? null;
-    const mediaUrl = ctx.account.platform === "mock" ? null : await deps.mediaUrl?.(ctx.media.storage_path) ?? null;
+    connector = deps.connectors.forAccount(ctx.account);
+    const viaZernio = ctx.account.provider === "zernio";
+    const credentials = viaZernio ? null : await deps.credentials?.get(ctx.account) ?? null;
+    const mediaUrl = ctx.account.platform === "mock" ? null : await deps.mediaUrl?.(ctx.media.storage_path, viaZernio ? ZERNIO_MEDIA_URL_TTL : void 0) ?? null;
     const io = {
       save: async (p, cp) => {
         await transition(db, claimed.id, workerId, "status = $3, external_checkpoint = $4", [p, JSON.stringify(cp)]);
@@ -1375,7 +1725,7 @@ async function executeInner(claimed, deps) {
       {
         jobId: claimed.id,
         attemptNo: claimed.attempt_count,
-        account: { id: ctx.account.id, platform: ctx.account.platform, externalAccountId: ctx.account.external_account_id, settings: ctx.account.settings },
+        account: accountInput(ctx.account),
         media: { storagePath: ctx.media.storage_path, mimeType: ctx.media.mime_type, sizeBytes: ctx.media.size_bytes, durationMs: ctx.media.duration_ms, url: mediaUrl },
         caption: composed.text,
         checkpoint,
@@ -1453,7 +1803,7 @@ async function handleFailure(claimed, ctx, err, a, deps) {
     });
     return rule2.enabled ? "failed_retryable" : "failed_permanent";
   }
-  if (err.code === "ig_processing") {
+  if (err.code && NO_ATTEMPT_WAIT_CODES.has(err.code)) {
     const delay = Math.max(30, err.retryAfterSeconds ?? 60);
     await transition(db, claimed.id, workerId, `status = 'failed_retryable', next_attempt_at = now() + make_interval(secs => $5), attempt_count = greatest(attempt_count - 1, 0), ${clear}`, [...base, delay]);
     await finishAttempt(db, a.attemptId, { outcome: "retry", phase: a.phase, err, checkpoint: a.checkpoint });
@@ -1498,10 +1848,10 @@ async function reconcileUncertain(deps, limit = 20, minAgeSeconds = 30) {
     const release = "lease_owner = null, lease_expires_at = null, reconcile_attempts = $3";
     let state;
     try {
-      const status = j.external_checkpoint ? await deps.connectors.get(ctx.account.platform).getStatus(
-        { id: ctx.account.id, platform: ctx.account.platform, externalAccountId: ctx.account.external_account_id, settings: ctx.account.settings },
+      const status = j.external_checkpoint ? await deps.connectors.forAccount(ctx.account).getStatus(
+        accountInput(ctx.account),
         j.external_checkpoint,
-        await deps.credentials?.get(ctx.account) ?? null
+        ctx.account.provider === "zernio" ? null : await deps.credentials?.get(ctx.account) ?? null
       ) : { state: "not_found" };
       state = status.state;
       if (status.state === "published") {
@@ -1622,6 +1972,47 @@ async function maintainInstagramTokens(db, deps, limit = 5) {
     await notifyOncePerDay(db, a.workspace_id, "account.token_expiring", a.id, { account: a.display_name, expires_at: a.expires_at });
   }
   return { refreshed, failed, expired: expired.rowCount ?? 0 };
+}
+
+// src/publishing/zernio-accounts.ts
+var ZERNIO_HEALTH_EVERY_MINUTES = 10;
+async function syncZernioAccounts(db, deps) {
+  const due = await db.query(
+    `select id, workspace_id, external_account_id, status, display_name from public.social_accounts
+      where provider = 'zernio' and status in ('active', 'needs_reauth')
+        and coalesce((settings ->> 'zernio_checked_at')::timestamptz, 'epoch') < now() - make_interval(mins => $1)`,
+    [ZERNIO_HEALTH_EVERY_MINUTES]
+  );
+  if (!due.rows.length) return { checked: 0, changed: 0 };
+  const health = new Map((await deps.zernio.accountsHealth()).map((h) => [h.accountId, h]));
+  let changed = 0;
+  for (const a of due.rows) {
+    const h = health.get(a.external_account_id);
+    const healthy = Boolean(h && h.canPost !== false && !h.needsReconnect);
+    const next = healthy ? "active" : "needs_reauth";
+    await db.query(
+      `update public.social_accounts
+          set status = $2, settings = settings || jsonb_build_object('zernio_checked_at', now(), 'zernio_health', $3::text)
+        where id = $1 and provider = 'zernio'`,
+      [a.id, next, h?.status ?? "missing"]
+    );
+    if (next !== a.status) {
+      changed++;
+      deps.log.warn("zernio account status changed", { account_id: a.id, from: a.status, to: next });
+      if (next === "needs_reauth") {
+        for (const uid of await workspaceAdmins(db, a.workspace_id)) {
+          await db.query(
+            `insert into public.notifications (workspace_id, user_id, type, payload)
+             select $1, $2, 'account.disconnected', $3::jsonb
+              where not exists (select 1 from public.notifications n where n.user_id = $2 and n.type = 'account.disconnected'
+                                  and n.payload ->> 'account_id' = $4 and n.created_at > now() - interval '1 day')`,
+            [a.workspace_id, uid, JSON.stringify({ account_id: a.id, account: a.display_name, reason: "zernio_needs_reconnect" }), a.id]
+          );
+        }
+      }
+    }
+  }
+  return { checked: due.rows.length, changed };
 }
 
 // src/publishing/scheduler.ts
@@ -2166,6 +2557,13 @@ async function tick(deps, opts, state) {
       await lowContentAlerts(deps.db);
       await completeCampaigns(deps.db);
     }
+    if (deps.zernio) {
+      try {
+        await syncZernioAccounts(deps.db, { zernio: deps.zernio, log: deps.log });
+      } catch (e) {
+        deps.log.error("zernio account sync failed", { error: String(e) });
+      }
+    }
     if (deps.instagramTokens) {
       try {
         await maintainInstagramTokens(deps.db, { ...deps.instagramTokens, log: deps.log });
@@ -2209,6 +2607,8 @@ async function runEdgeTick(env, postgres, invocationId) {
   const graph = new GraphClient({ version: env.graphVersion });
   const connectors = new ConnectorRegistry().register(new InstagramConnector(graph, { pollIntervalMs: 1e4, pollBudgetMs: 4e4 })).register(new FacebookConnector(graph));
   if (env.simulatedAccounts !== false) connectors.register(new MockConnector(new PgMockStore(db)));
+  const zernio = env.zernioApiKey ? new ZernioClient({ apiKey: env.zernioApiKey }) : null;
+  if (zernio) connectors.register(new ZernioConnector(zernio, { pollBudgetMs: 4e4, pollIntervalMs: 1e4 }));
   let cipher = null;
   if (env.tokenEncryptionKey) {
     try {
@@ -2235,7 +2635,8 @@ async function runEdgeTick(env, postgres, invocationId) {
         connectors,
         credentials: new PgCredentialProvider(db, cipher),
         instagramTokens: { cipher, graph },
-        mediaUrl: (p) => storage.signedUrl(p, 2 * 3600),
+        zernio,
+        mediaUrl: (p, ttl) => storage.signedUrl(p, ttl ?? 2 * 3600),
         ffmpeg: { ffprobe: "ffprobe", ffmpeg: "ffmpeg" },
         tmpDir: "/tmp",
         probeMode: "remote"

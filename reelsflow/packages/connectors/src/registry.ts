@@ -1,4 +1,4 @@
-import { ConnectorError, type ConnectorPlatform, type PublishConnector } from "./types";
+import { ConnectorError, type ConnectorKey, type ConnectorPlatform, type PublishConnector } from "./types";
 
 /** Status de disponibilidade exibido na interface (Contas Conectadas). */
 export const CONNECTOR_AVAILABILITY: Record<ConnectorPlatform, { available: boolean; reason: string }> = {
@@ -10,14 +10,25 @@ export const CONNECTOR_AVAILABILITY: Record<ConnectorPlatform, { available: bool
 };
 
 export class ConnectorRegistry {
-  private readonly map = new Map<ConnectorPlatform, PublishConnector>();
+  private readonly map = new Map<ConnectorKey, PublishConnector>();
   register(c: PublishConnector) {
     this.map.set(c.platform, c);
     return this;
   }
-  get(platform: ConnectorPlatform): PublishConnector {
-    const c = this.map.get(platform);
-    if (!c) throw new ConnectorError("permanent", `Conector ${platform} indisponível.`, { code: "connector_unavailable" });
+  get(key: ConnectorKey): PublishConnector {
+    const c = this.map.get(key);
+    if (!c) throw new ConnectorError("permanent", `Conector ${key} indisponível.`, { code: "connector_unavailable" });
     return c;
+  }
+  /** Conta conectada por um provedor intermediário (provider = "zernio") usa o conector dele. */
+  forAccount(account: { platform: ConnectorPlatform; provider?: string | null }): PublishConnector {
+    if (account.provider === "zernio" && !this.map.has("zernio")) {
+      // Configuração do servidor ausente (ZERNIO_API_KEY): a publicação espera, não falha.
+      throw new ConnectorError("transient", "Integração com a Zernio não configurada no worker (ZERNIO_API_KEY).", {
+        code: "zernio_not_configured",
+        retryAfterSeconds: 900,
+      });
+    }
+    return this.get(account.provider === "zernio" ? "zernio" : account.platform);
   }
 }
