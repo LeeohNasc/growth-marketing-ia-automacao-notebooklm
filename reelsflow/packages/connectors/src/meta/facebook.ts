@@ -45,6 +45,9 @@ export class FacebookConnector implements PublishConnector {
   }
 
   async publish(input: PublishInput, io: CheckpointIO): Promise<PublishResult> {
+    if (input.media.mimeType.startsWith("image/")) {
+      throw new ConnectorError("permanent", "Imagem não suportada: o conector direto do Facebook publica apenas Reels (vídeo). Use uma conta conectada via Zernio para imagens.", { code: "fb_image_unsupported" });
+    }
     const token = this.token(input);
     const pageId = input.account.externalAccountId;
     let videoId = typeof input.checkpoint?.video_id === "string" ? input.checkpoint.video_id : null;

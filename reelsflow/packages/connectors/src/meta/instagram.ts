@@ -80,6 +80,9 @@ export class InstagramConnector implements PublishConnector {
   }
 
   async publish(input: PublishInput, io: CheckpointIO): Promise<PublishResult> {
+    if (input.media.mimeType.startsWith("image/")) {
+      throw new ConnectorError("permanent", "Imagem não suportada: o conector direto do Instagram publica apenas Reels (vídeo). Use uma conta conectada via Zernio para imagens.", { code: "ig_image_unsupported" });
+    }
     const token = this.token(input);
     const igUser = input.account.externalAccountId;
     let containerId = typeof input.checkpoint?.container_id === "string" ? input.checkpoint.container_id : null;

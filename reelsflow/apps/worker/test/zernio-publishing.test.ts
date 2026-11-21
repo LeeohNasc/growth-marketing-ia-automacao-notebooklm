@@ -71,9 +71,9 @@ const postBody = (acc: string, jobId: string, status: string, target: Record<str
 const publishedBody = (acc: string, jobId: string) =>
   postBody(acc, jobId, "published", { status: "published", platformPostId: "17900000000000123", platformPostUrl: "https://www.instagram.com/reel/PIPOCOU/" });
 
-async function dueJob(accountId: string) {
+async function dueJob(accountId: string, mediaOpt: { mime?: string; ext?: string } = {}) {
   const camp = (await q("insert into public.campaigns (workspace_id, name, status, timezone, weekdays, times, start_date, caption, created_by) values ($1,'Diária','active','America/Sao_Paulo','{1,2,3,4,5,6,7}','{09:00}',current_date,'Legenda #memes',$2) returning id", [ws, user]))[0].id;
-  const media = (await q("insert into public.media_assets (workspace_id, name, original_filename, storage_path, mime_type, size_bytes, sha256, status) values ($1,'v','v.mp4',$2,'video/mp4',10,$3,'uploading') returning id", [ws, `${ws}/${crypto.randomUUID()}/original.mp4`, "f".repeat(64)]))[0].id;
+  const media = (await q("insert into public.media_assets (workspace_id, name, original_filename, storage_path, mime_type, size_bytes, sha256, status) values ($1,'v','v.mp4',$2,$3,10,$4,'uploading') returning id", [ws, `${ws}/${crypto.randomUUID()}/original.${mediaOpt.ext ?? "mp4"}`, mediaOpt.mime ?? "video/mp4", "f".repeat(64)]))[0].id;
   for (const s of ["uploaded", "processing", "ready"]) await q("update public.media_assets set status = $2 where id = $1", [media, s]);
   const target = (await q("insert into public.campaign_targets (campaign_id, workspace_id, social_account_id) values ($1,$2,$3) returning id", [camp, ws, accountId]))[0].id;
   const cm = (await q("insert into public.campaign_media (campaign_id, workspace_id, media_asset_id) values ($1,$2,$3) returning id", [camp, ws, media]))[0].id;
@@ -237,5 +237,28 @@ describe("sincronização de saúde das contas Zernio", () => {
     await q("update public.social_accounts set settings = settings - 'zernio_checked_at' where id = $1", [accId]);
     await syncZernioAccounts(db, { zernio: z.client, log: silentLogger });
     expect((await q("select status from public.social_accounts where id = $1", [accId]))[0].status).toBe("active");
+  });
+});
+
+describe("Card Editorial: o agendador publica o arquivo FINAL renderizado", () => {
+  it("publicação de card usa a mídia do render (JPEG final), nunca as origens do card", async () => {
+    const { id: accId, acc } = await zernioAccount();
+    let jobId = "";
+    const z = fakeZernio((r) =>
+      r.path === `accounts/${acc}` ? { body: account(acc) } : r.method === "POST" && r.path === "posts" ? { status: 201, body: publishedBody(acc, jobId) } : undefined,
+    );
+    jobId = await dueJob(accId, { mime: "image/jpeg", ext: "jpg" });
+    const media = (await q("select m.id, m.storage_path from public.publication_jobs j join public.media_assets m on m.id = j.media_asset_id where j.id = $1", [jobId]))[0];
+    // card com origens próprias apontando para este render
+    const card = (await q(
+      "insert into public.editorial_cards (workspace_id, created_by, title, page_name, username, headline, media_paths, avatar_path) values ($1,$2,'Card','Pipocou','pipocoumemes','Manchete',$3,$4) returning id",
+      [ws, user, [`${ws}/cards/${crypto.randomUUID()}/foto-1.jpg`], `${ws}/cards/${crypto.randomUUID()}/avatar.png`],
+    ))[0].id;
+    await q("update public.media_assets set source_card_id = $2 where id = $1", [media.id, card]);
+    await tick(depsWith(z), opts, { lastMaintenance: Date.now() });
+    expect(await job(jobId)).toMatchObject({ status: "published" });
+    const sent = z.creates()[0]!.body;
+    expect(sent.mediaItems).toEqual([{ type: "image", url: `https://storage.test/${media.storage_path}?token=assinado` }]);
+    expect(JSON.stringify(sent)).not.toContain("/cards/");
   });
 });

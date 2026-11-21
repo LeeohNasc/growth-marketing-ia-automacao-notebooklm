@@ -199,3 +199,22 @@ describe("ZernioConnector — reconciliação", () => {
     expect((await conn(fakeZernio(() => new TypeError("x")).client).getStatus(acc, { zernio_post_id: "post1" })).state).toBe("unknown");
   });
 });
+
+describe("ZernioConnector — imagem (Card Editorial)", () => {
+  const img = (platform: "instagram" | "tiktok" = "instagram"): PublishInput => ({
+    ...input(null, { platform }),
+    media: { storagePath: "ws/m/original.jpg", mimeType: "image/jpeg", sizeBytes: 300_000, durationMs: null, url: "https://storage.test/card.jpg?token=x" },
+  });
+  it("envia como imagem (post de feed), sem opções de Reel", async () => {
+    const z = fakeZernio((r) => (r.path === `accounts/${ACC}` ? { body: { account } } : r.method === "POST" ? { status: 201, body: published } : undefined));
+    await conn(z.client).publish(img(), sink().io);
+    const body = z.calls.find((c) => c.method === "POST")!.body;
+    expect(body.mediaItems).toEqual([{ type: "image", url: "https://storage.test/card.jpg?token=x" }]);
+    expect(body.platforms[0].platformSpecificData).toBeUndefined();
+  });
+  it("imagem para TikTok: recusada antes de qualquer chamada", async () => {
+    const z = fakeZernio(() => undefined);
+    expect(await conn(z.client).publish(img("tiktok"), sink().io).catch((e) => e)).toMatchObject({ errorClass: "permanent", code: "zernio_image_platform" });
+    expect(z.calls).toHaveLength(0);
+  });
+});

@@ -63,6 +63,10 @@ export class ZernioConnector implements PublishConnector {
     const prev = (input.checkpoint ?? {}) as Partial<Checkpoint>;
     let cp: Checkpoint = { provider: "zernio", idempotency_key: key, ...prev };
     const platform = input.account.platform as ZernioPlatform;
+    const isImage = input.media.mimeType.startsWith("image/");
+    if (isImage && platform !== "instagram" && platform !== "facebook") {
+      throw new ConnectorError("permanent", "Imagens só são publicadas no Instagram e no Facebook. Nada foi publicado.", { code: "zernio_image_platform" });
+    }
 
     let post: ZernioPost;
     if (cp.zernio_post_id) {
@@ -79,8 +83,15 @@ export class ZernioConnector implements PublishConnector {
           this.client.createPost(
             {
               content: input.caption || undefined,
-              mediaItems: [{ type: "video", url: input.media.url! }],
-              platforms: [{ platform, accountId: input.account.externalAccountId, ...(platform === "instagram" ? { platformSpecificData: { shareToFeed: true } } : {}) }],
+              // Imagem (ex.: Card Editorial) vira post de feed; vídeo vira Reel (shareToFeed só vale para Reels).
+              mediaItems: [{ type: isImage ? "image" : "video", url: input.media.url! }],
+              platforms: [
+                {
+                  platform,
+                  accountId: input.account.externalAccountId,
+                  ...(platform === "instagram" && !isImage ? { platformSpecificData: { shareToFeed: true } } : {}),
+                },
+              ],
               profileId: input.account.providerProfileId ?? undefined,
               publishNow: true,
               externalId: key,

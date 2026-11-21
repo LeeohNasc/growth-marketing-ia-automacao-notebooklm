@@ -1,8 +1,9 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import path from "node:path";
-import { ProbeError, evaluateCompatibility, parseFfprobe, thumbnailPathFor } from "@reelsflow/domain";
+import { ProbeError, evaluateCompatibility, evaluateImageCompatibility, parseFfprobe, thumbnailPathFor } from "@reelsflow/domain";
 import { ffprobeJson, makeThumbnail } from "../ffmpeg";
-import { httpRangeReader, probeMp4 } from "../media/mp4";
+import { bufferReader, httpRangeReader, probeMp4 } from "../media/mp4";
+import { ImageProbeError, probeJpeg } from "../media/image";
 import type { Handler } from "./types";
 
 type MediaRow = {
@@ -11,6 +12,7 @@ type MediaRow = {
   uploaded_by: string | null;
   name: string;
   storage_path: string;
+  mime_type: string;
   size_bytes: number;
   status: string;
   deleted_at: string | null;
@@ -29,7 +31,7 @@ const PROBE_FAILURE_REASONS: Record<ProbeError["code"], string> = {
 export const handleProbe: Handler = async (job, deps, ctx) => {
   const { db, storage, log } = deps;
   const { rows } = await db.query<MediaRow>(
-    "select id, workspace_id, uploaded_by, name, storage_path, size_bytes::float8 as size_bytes, status, deleted_at from public.media_assets where id = $1",
+    "select id, workspace_id, uploaded_by, name, storage_path, mime_type, size_bytes::float8 as size_bytes, status, deleted_at from public.media_assets where id = $1",
     [job.media_asset_id],
   );
   const media = rows[0];
@@ -42,6 +44,7 @@ export const handleProbe: Handler = async (job, deps, ctx) => {
   }
 
   const remote = deps.probeMode === "remote";
+  if (media.mime_type.startsWith("image/")) return probeImage(deps, media, remote, ctx, job.id);
   const dir = remote ? null : await mkdtemp(path.join(deps.tmpDir, "rf-probe-"));
   try {
     const ext = path.extname(media.storage_path).slice(1);
@@ -109,6 +112,51 @@ export const handleProbe: Handler = async (job, deps, ctx) => {
     if (dir) await rm(dir, { recursive: true, force: true });
   }
 };
+
+/**
+ * Imagem (ex.: Card Editorial renderizado): confere que é JPEG de verdade e lê as dimensões pelo
+ * cabeçalho; a própria imagem serve de miniatura.
+ */
+async function probeImage(deps: Parameters<Handler>[1], media: MediaRow, remote: boolean, ctx: { isFinalAttempt: boolean }, jobId: string) {
+  const { db, storage, log } = deps;
+  let dir: string | null = null;
+  try {
+    let img;
+    try {
+      if (remote) {
+        const url = await storage.signedUrl(media.storage_path, 600);
+        if (!url) throw new Error("URL temporária da imagem indisponível");
+        img = await probeJpeg(await httpRangeReader(url, deps.fetchImpl));
+      } else {
+        dir = await mkdtemp(path.join(deps.tmpDir, "rf-probe-"));
+        const local = path.join(dir, "original.jpg");
+        await storage.download(media.storage_path, local);
+        img = await probeJpeg(bufferReader(new Uint8Array(await readFile(local))));
+      }
+    } catch (err) {
+      if (!(err instanceof ImageProbeError)) throw err;
+      await markFailed(deps, media, "invalid_image");
+      log.warn("probe invalid image", { job_id: jobId, media_id: media.id, reason: err.code });
+      return;
+    }
+    const compat = evaluateImageCompatibility(img, Number(media.size_bytes));
+    await db.query(
+      `update public.media_assets
+          set status = 'ready', failure_reason = null, duration_ms = null, width = $2, height = $3, rotation = 0, fps = null,
+              video_codec = null, audio_codec = null, has_audio = false, bitrate = null, container = 'jpeg',
+              thumbnail_path = $4, compatibility = $5, probed_at = now()
+        where id = $1 and status = 'processing'`,
+      [media.id, img.width, img.height, media.storage_path, JSON.stringify(compat)],
+    );
+    await notifyBatchCompleted(deps, media);
+    log.info("probe done (image)", { job_id: jobId, media_id: media.id, width: img.width, height: img.height });
+  } catch (err) {
+    if (ctx.isFinalAttempt) await markFailed(deps, media, "processing_error");
+    throw err;
+  } finally {
+    if (dir) await rm(dir, { recursive: true, force: true });
+  }
+}
 
 async function markFailed(deps: Parameters<Handler>[1], media: MediaRow, reason: string) {
   await deps.db.query(

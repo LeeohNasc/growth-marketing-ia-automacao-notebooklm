@@ -203,3 +203,14 @@ describe("IDs grandes", () => {
     expect(p.userId).toBe("17841400000000001");
   });
 });
+
+describe("conector direto e imagens", () => {
+  it("Instagram direto recusa imagem sem chamar a API (só publica Reels)", async () => {
+    const g = new FakeGraph();
+    const err = await new InstagramConnector(new GraphClient({ fetchImpl: g.fetch }))
+      .publish({ ...input(), media: { storagePath: "p.jpg", mimeType: "image/jpeg", sizeBytes: 1, durationMs: null, url: "https://x/p.jpg" } }, sink().io)
+      .catch((e) => e);
+    expect(err).toMatchObject({ errorClass: "permanent", code: "ig_image_unsupported" });
+    expect(g.calls).toHaveLength(0);
+  });
+});

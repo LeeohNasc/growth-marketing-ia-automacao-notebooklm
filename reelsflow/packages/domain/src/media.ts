@@ -231,7 +231,39 @@ const SPECS: Record<Platform, Spec> = {
 
 export type CompatIssue = { level: "error" | "warning"; code: string; message: string };
 export type PlatformCompat = { status: "ok" | "warning" | "error"; verified?: boolean; issues: CompatIssue[] };
-export type Compatibility = { rulesVersion: string; platforms: Record<Platform, PlatformCompat> };
+export type Compatibility = { rulesVersion: string; kind?: "video" | "image"; platforms: Record<Platform, PlatformCompat> };
+
+/**
+ * Imagem (ex.: Card Editorial renderizado). Mesmas chaves por rede da compatibilidade de vídeo
+ * para a interface e o agendamento funcionarem sem casos especiais:
+ *  - instagram_reels → publicação no FEED do Instagram (via Zernio): JPEG, proporção 4:5 a 1,91:1;
+ *  - facebook_reels  → foto na Página (via Zernio);
+ *  - tiktok / youtube_shorts → o ReelsFlow não publica imagens nessas redes.
+ */
+export const IMAGE_RULES_VERSION = "2026-11-21-image-v1";
+export function evaluateImageCompatibility(img: { width: number; height: number; format: string }, sizeBytes?: number): Compatibility {
+  const r = img.width / img.height;
+  const ig: CompatIssue[] = [];
+  if (img.format !== "jpeg") ig.push({ level: "error", code: "image_format", message: "O Instagram aceita apenas JPEG." });
+  if (r < 0.8 - 0.005 || r > 1.91 + 0.005) {
+    ig.push({ level: "error", code: "image_ratio", message: "Proporção fora de 4:5 a 1,91:1: não é aceita no feed do Instagram (use 4:5 ou 1:1)." });
+  }
+  if (sizeBytes && sizeBytes > 8 * MB_) ig.push({ level: "error", code: "too_large", message: "Imagem acima de 8 MB." });
+  ig.push({ level: "warning", code: "feed_post", message: "Imagem: publicada no feed (não como Reel), somente por contas conectadas via Zernio." });
+  const fb: CompatIssue[] = [{ level: "warning", code: "feed_post", message: "Imagem: publicada como foto na Página, somente via Zernio." }];
+  const no = (label: string): PlatformCompat => ({ status: "error", verified: true, issues: [{ level: "error", code: "image_unsupported", message: `O ReelsFlow não publica imagens no ${label}.` }] });
+  const st = (issues: CompatIssue[]): PlatformCompat["status"] => (issues.some((i) => i.level === "error") ? "error" : issues.length ? "warning" : "ok");
+  return {
+    rulesVersion: IMAGE_RULES_VERSION,
+    kind: "image",
+    platforms: {
+      instagram_reels: { status: st(ig), verified: false, issues: ig },
+      facebook_reels: { status: st(fb), verified: false, issues: fb },
+      tiktok: no("TikTok"),
+      youtube_shorts: no("YouTube"),
+    },
+  };
+}
 
 /** ffprobe reporta "mov,mp4,m4a,3gp,3g2,mj2" para MP4/MOV; usa-se a extensão original para desambiguar. */
 function containerOf(probe: MediaProbe, ext: string): string {
@@ -333,6 +365,7 @@ export const MEDIA_STATUS_LABELS = {
 
 export const MEDIA_FAILURE_LABELS: Record<string, string> = {
   invalid_video: "O arquivo não é um vídeo válido.",
+  invalid_image: "O arquivo não é uma imagem JPEG válida.",
   processing_error: "Não foi possível analisar o vídeo.",
   size_mismatch: "O arquivo recebido não confere com o original.",
 };
