@@ -28,7 +28,12 @@ let client: Stripe | null = null;
 export function stripeClient(): Stripe {
   const secret = process.env.STRIPE_SECRET_KEY ?? "";
   if (!/^(sk|rk)_test_/.test(secret)) throw new Error("Stripe não configurada em modo de teste.");
-  client ??= new Stripe(secret, { appInfo: { name: "ReelsFlow" }, maxNetworkRetries: 2 });
+  client ??= new Stripe(secret, {
+    appInfo: { name: "ReelsFlow" },
+    maxNetworkRetries: 2,
+    // Ambientes atrás de proxy HTTP: STRIPE_HTTP_CLIENT=fetch (padrão: cliente https do SDK).
+    ...(process.env.STRIPE_HTTP_CLIENT === "fetch" ? { httpClient: Stripe.createFetchHttpClient() } : {}),
+  });
   return client;
 }
 
@@ -79,6 +84,9 @@ export function stripeGateway(stripe: Stripe = stripeClient()): StripeGateway {
           cancel_url: a.cancelUrl,
           expires_at: a.expiresAt,
           locale: "pt-BR",
+          // Cobrança SEMPRE em BRL: sem conversão automática de moeda pela localização do comprador
+          // (Adaptive Pricing ligado na conta mostraria e cobraria em USD/outra moeda pelo câmbio).
+          adaptive_pricing: { enabled: false },
         },
         { idempotencyKey },
       );

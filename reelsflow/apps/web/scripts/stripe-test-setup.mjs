@@ -14,7 +14,8 @@ if (!/^(sk|rk)_test_/.test(key)) {
   console.error("Use uma chave de TESTE (sk_test_… ou rk_test_…) em STRIPE_SECRET_KEY.");
   process.exit(1);
 }
-const stripe = new Stripe(key);
+// STRIPE_HTTP_CLIENT=fetch: usa fetch (respeita HTTPS_PROXY com NODE_USE_ENV_PROXY=1) em vez do módulo https.
+const stripe = new Stripe(key, process.env.STRIPE_HTTP_CLIENT === "fetch" ? { httpClient: Stripe.createFetchHttpClient() } : {});
 const balance = await stripe.balance.retrieve();
 if (balance.livemode) {
   console.error("A chave aponta para o modo de PRODUÇÃO. Abortado.");
@@ -30,9 +31,20 @@ const out = {};
 const productPrices = [];
 for (const p of PLANS) {
   const lookup = `reelsflow_${p.plan}_monthly`;
-  const found = (await stripe.prices.list({ lookup_keys: [lookup], active: true, limit: 1 })).data[0];
-  let price = found;
   const ok = (x) => x && x.currency === "brl" && x.unit_amount === p.amount && x.recurring?.interval === "month" && x.recurring?.interval_count === 1;
+  // 1) pelo lookup_key; 2) um preço ativo equivalente já cadastrado (mesmo valor/moeda/recorrência)
+  //    num produto deste plano (metadata reelsflow_plan ou nome "ReelsFlow <Plano>"). Só cria se não houver.
+  let found = (await stripe.prices.list({ lookup_keys: [lookup], active: true, limit: 1 })).data[0];
+  if (!ok(found)) {
+    const all = (await stripe.prices.list({ active: true, type: "recurring", currency: "brl", limit: 100, expand: ["data.product"] })).data;
+    found = all.find((x) => {
+      const prod = /** @type {import("stripe").Stripe.Product | import("stripe").Stripe.DeletedProduct | string} */ (x.product);
+      if (!ok(x) || typeof prod !== "object" || prod.deleted) return false;
+      const live = /** @type {import("stripe").Stripe.Product} */ (prod);
+      return live.active && (live.metadata?.reelsflow_plan === p.plan || live.name.trim().toLowerCase() === p.name.toLowerCase());
+    });
+  }
+  let price = found;
   if (!ok(price)) {
     price = await stripe.prices.create(
       {
@@ -52,7 +64,8 @@ for (const p of PLANS) {
   console.error(`${p.name}: ${price.id} (${found && ok(found) ? "reaproveitado" : "criado"})`);
 }
 
-const portal = await stripe.billingPortal.configurations.create({
+const existingPortal = (await stripe.billingPortal.configurations.list({ active: true, limit: 100 })).data.find((c) => c.metadata?.reelsflow === "test-setup");
+const portal = existingPortal ?? await stripe.billingPortal.configurations.create({
   business_profile: { headline: "ReelsFlow — gerencie sua assinatura (modo de teste)" },
   features: {
     invoice_history: { enabled: true },
@@ -63,6 +76,7 @@ const portal = await stripe.billingPortal.configurations.create({
   metadata: { reelsflow: "test-setup" },
 });
 out.STRIPE_PORTAL_CONFIGURATION = portal.id;
+console.error(`Portal do cliente: ${portal.id} (${existingPortal ? "reaproveitado" : "criado"})`);
 
 console.log("\n# Cole no apps/web/.env.local (modo de teste):");
 for (const [k, v] of Object.entries(out)) console.log(`${k}=${v}`);

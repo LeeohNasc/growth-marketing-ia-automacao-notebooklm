@@ -1,7 +1,7 @@
 # Cobrança recorrente — Stripe Checkout + Billing (v1, MODO DE TESTE)
 
-> Estado em 2026-11-21: implementado e testado **localmente**. Não aplicado em produção, sem deploy,
-> nenhuma compra no sandbox da Stripe ainda (falta a chave de teste). Chaves `sk_live_` são recusadas.
+> Estado em 2026-11-21: implementado e validado **no sandbox da Stripe** contra o app real rodando localmente
+> (Next + Supabase local). Não aplicado em produção, sem deploy, sem cobrança real. Chaves `sk_live_` são recusadas.
 
 ## Fluxo
 
@@ -38,6 +38,7 @@ Stripe → POST /api/billing/webhook (assinatura verificada no corpo bruto)
 | Preparação do sandbox | `apps/web/scripts/stripe-test-setup.mjs` |
 | Migration | `supabase/migrations/20261121000012_billing_stripe.sql` |
 | Testes | `supabase/tests/src/billing.test.ts` (23), `apps/web/e2e/billing.spec.ts` (6) |
+| Relay de eventos (dev/sandbox) | `apps/web/scripts/stripe-event-relay.mjs` |
 
 Também mudaram: landing (CTAs e itens "planejado"), onboarding e login/cadastro (preservam `next`).
 
@@ -88,6 +89,31 @@ Webhook: `<SITE>/api/billing/webhook` com os eventos `checkout.session.completed
 `checkout.session.expired`, `customer.subscription.created|updated|deleted|paused|resumed`,
 `invoice.paid`, `invoice.payment_failed`.
 
+## Validação no sandbox (21/11/2026) — 35/35
+
+Ambiente: `next start` local + **Supabase local** (Docker, `supabase start`) + **Stripe em modo de teste**
+(conta BR, `livemode=false`). Preços **reaproveitados** (já existiam no sandbox; nenhum criado):
+Pro `price_1Ue7KE…` 99,90 · Business `price_1Ue7Lh…` 299,90 · Premium `price_1Ue7Mw…` 799,90 (BRL, mensal).
+
+| Passou na Stripe real (sandbox) | Ficou simulado |
+|---|---|
+| Checkout Sessions reais criadas pelo app (BRL, valor, mensal, sem conversão), cliente vinculado ao workspace | Preenchimento da página hospedada: o formulário fica atrás de hCaptcha em navegador automatizado. O "cliente paga" foi feito pela API (`pm_card_visa` no mesmo cliente e preço) |
+| Assinaturas reais ativas (Pro, Business, Premium), incompletas (pendente e cartão recusado) e cancelada | Entrega do webhook: a Stripe não alcança `127.0.0.1`; o relay (`scripts/stripe-event-relay.mjs`) lê os eventos REAIS em `/v1/events` e os entrega assinados com um segredo local |
+| Eventos reais → rota real `/api/billing/webhook` → banco: ativação, pendente, recusa, expiração, cancelamento | `checkout.session.completed` e renovação/atraso por tempo (sem test clock): cobertos nos testes locais |
+| Idempotência com evento real reenviado; corpo adulterado recusado (400) | |
+| Limites no backend após a ativação; outros workspaces intactos; Starter sem checkout | |
+
+Achado corrigido: a conta tem **Adaptive Pricing** ligado — a Stripe exibia e cobraria **US$ 52,47** em vez de
+R$ 299,90 pela localização do comprador. O checkout agora fixa BRL (`adaptive_pricing.enabled=false`).
+Atenção: a descrição do produto Business na Stripe promete "1 marca", recurso que ainda não existe.
+
+### Supabase local (sem projeto remoto)
+
+`supabase start` aplica as migrations. **Cuidado:** a migration 7 agenda (via pg_cron) chamadas ao worker de
+**produção**; no local, use uma cópia das migrations com a 7 neutralizada (foi o que se fez) e confira
+`select * from cron.job` vazio. Rodar o app com `NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321` e as chaves
+locais que o `supabase start` imprime. Atrás de proxy HTTP: `STRIPE_HTTP_CLIENT=fetch` + `NODE_USE_ENV_PROXY=1`.
+
 ## Reproduzir no sandbox (do clique ao desbloqueio)
 
 1. `cd apps/web && STRIPE_SECRET_KEY=sk_test_… node scripts/stripe-test-setup.mjs` → copie os IDs para `.env.local`.
@@ -101,8 +127,8 @@ Webhook: `<SITE>/api/billing/webhook` com os eventos `checkout.session.completed
 
 ## Pendente
 
-- **Credencial**: chave de teste da Stripe (o pedido da chave nesta sessão foi recusado) e um projeto
-  Supabase de teste para aplicar a migration 12 → sem isso, nenhuma compra no sandbox foi feita.
+- **Conclusão humana da página hospedada** (cartão 4242 no navegador) para fechar o `checkout.session.completed`
+  real; e um endpoint de webhook público (homologação) para validar a entrega/assinatura feitas pela Stripe.
 - **Decisões comerciais**: carência do `past_due` (configurar as novas tentativas na Stripe); reembolso de
   duplicidade; proration na troca de plano; política acima do limite após downgrade; Starter "1 conexão"
   na landing vs. backend "1 por rede" (inalterado); limites de vídeos/armazenamento dos pagos; meios de
