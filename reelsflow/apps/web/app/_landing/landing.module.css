@@ -1370,21 +1370,124 @@
   width: 220px;
   height: auto;
 }
-.connectors {
-  display: block;
-  width: 100%;
-  height: 90px;
+/* Conexões + pulsos (SVG sobreposto ao painel, atrás dos cards) */
+.connectorsLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
   overflow: visible;
 }
-.connectors path {
+.integrationsPanel > :not(.connectorsLayer) {
+  position: relative;
+  z-index: 1;
+}
+.connectorBase {
   fill: none;
   stroke: var(--red-light);
   stroke-width: 2;
   stroke-dasharray: 7 6;
-  vector-effect: non-scaling-stroke;
-  opacity: 0.85;
+  opacity: 0.8;
+}
+.originDot,
+.endDot {
+  fill: var(--red-light);
+}
+.endDot {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0.75;
+}
+.trail {
+  fill: none;
+  stroke: #ff1734;
+  stroke-linecap: round;
+  opacity: 0;
+}
+.trailLong { stroke-width: 3; stroke-dasharray: 22 400; stroke-dashoffset: 22; }
+.trailMid { stroke-width: 3.5; stroke-dasharray: 12 400; stroke-dashoffset: 12; }
+.trailShort { stroke-width: 4; stroke-dasharray: 5 400; stroke-dashoffset: 5; }
+.pulseCore,
+.pulseHalo {
+  offset-rotate: 0deg;
+  offset-distance: 0%;
+  opacity: 0;
+}
+.pulseCore { fill: #ffe3e7; stroke: #ff1734; stroke-width: 2; }
+.pulseHalo { fill: #ff1734; }
+
+/* Ciclo de 4 s: percurso em 1,7 s (0–42,5%), chegada acende o ponto (42,5–52%), pausa até o próximo. */
+@media (prefers-reduced-motion: no-preference) {
+  .trail,
+  .pulseCore,
+  .pulseHalo,
+  .endDot {
+    animation-duration: 4s;
+    animation-iteration-count: infinite;
+    animation-timing-function: linear;
+    animation-delay: var(--rf-delay, 0ms);
+    animation-fill-mode: both;
+  }
+  .pulseCore { animation-name: rfTravelCore; animation-timing-function: cubic-bezier(0.45, 0.05, 0.4, 0.95); }
+  .pulseHalo { animation-name: rfTravelHalo; animation-timing-function: cubic-bezier(0.45, 0.05, 0.4, 0.95); }
+  .trailLong { animation-name: rfTrailLong; animation-timing-function: cubic-bezier(0.45, 0.05, 0.4, 0.95); }
+  .trailMid { animation-name: rfTrailMid; animation-timing-function: cubic-bezier(0.45, 0.05, 0.4, 0.95); }
+  .trailShort { animation-name: rfTrailShort; animation-timing-function: cubic-bezier(0.45, 0.05, 0.4, 0.95); }
+  .endDot { animation-name: rfArrive; }
+  /* fora da tela: pausado */
+  .connectorsLayer[data-active="false"] * {
+    animation-play-state: paused;
+  }
+}
+@keyframes rfTravelCore {
+  0% { offset-distance: 0%; opacity: 0; }
+  3% { opacity: 1; }
+  40% { opacity: 1; }
+  42.5% { offset-distance: 100%; opacity: 0; }
+  100% { offset-distance: 100%; opacity: 0; }
+}
+@keyframes rfTravelHalo {
+  0% { offset-distance: 0%; opacity: 0; }
+  3% { opacity: 0.55; }
+  40% { opacity: 0.55; }
+  42.5% { offset-distance: 100%; opacity: 0; }
+  100% { offset-distance: 100%; opacity: 0; }
+}
+@keyframes rfTrailLong {
+  0% { stroke-dashoffset: 22; opacity: 0; }
+  4% { opacity: 0.22; }
+  39% { opacity: 0.22; }
+  42.5% { stroke-dashoffset: -78; opacity: 0; }
+  100% { stroke-dashoffset: -78; opacity: 0; }
+}
+@keyframes rfTrailMid {
+  0% { stroke-dashoffset: 12; opacity: 0; }
+  4% { opacity: 0.45; }
+  39% { opacity: 0.45; }
+  42.5% { stroke-dashoffset: -88; opacity: 0; }
+  100% { stroke-dashoffset: -88; opacity: 0; }
+}
+@keyframes rfTrailShort {
+  0% { stroke-dashoffset: 5; opacity: 0; }
+  4% { opacity: 0.9; }
+  39% { opacity: 0.9; }
+  42.5% { stroke-dashoffset: -95; opacity: 0; }
+  100% { stroke-dashoffset: -95; opacity: 0; }
+}
+@keyframes rfArrive {
+  0%, 41% { transform: scale(1); opacity: 0.75; filter: none; }
+  45% { transform: scale(1.9); opacity: 1; filter: drop-shadow(0 0 6px #ff1734); }
+  53%, 100% { transform: scale(1); opacity: 0.75; filter: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .trail,
+  .pulseCore,
+  .pulseHalo {
+    display: none;
+  }
 }
 .networks {
+  margin-top: 90px !important;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -1450,8 +1553,7 @@
     border-left: 3px solid var(--red);
   }
   .feature h3 { font-size: 1.1rem; }
-  .connectors { display: none; }
-  .hubCard { margin-bottom: 22px; }
+  .networks { margin-top: 44px !important; }
   .networks { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   .network { min-height: 150px; }
   .networkIcon { height: 48px; }

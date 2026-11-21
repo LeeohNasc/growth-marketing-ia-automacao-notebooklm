@@ -305,6 +305,92 @@ for (const w of [320, 390]) {
     expect(fs).toBeGreaterThanOrEqual(16);
     const cards = await page.locator("#integracoes li").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().width));
     expect(Math.min(...cards)).toBeGreaterThan(120);
-    await expect(page.locator("#integracoes svg[class*=connectors]")).toBeHidden();
+    await expect(page.locator("#integracoes [data-line]")).toHaveCount(4);
   });
 }
+
+/** Pulsos das integrações: saem do centro, seguem a curva e terminam no card certo. */
+async function checkConnectors(page: Page) {
+  const panel = page.locator("#integracoes");
+  await panel.scrollIntoViewIfNeeded();
+  await expect(panel.locator("[data-line]")).toHaveCount(4);
+  const geo = await page.evaluate(() => {
+    const svg = document.querySelector("#integracoes svg[data-active]") as SVGSVGElement;
+    const sb = svg.getBoundingClientRect();
+    const hub = document.querySelector("[data-hub]")!.getBoundingClientRect();
+    const cards = [...document.querySelectorAll("[data-network]")].map((c) => c.getBoundingClientRect());
+    const lines = [...svg.querySelectorAll("[data-line] > path:first-child")].map((p) => {
+      const path = p as SVGPathElement, L = path.getTotalLength();
+      const a = path.getPointAtLength(0), b = path.getPointAtLength(L);
+      return { start: [a.x + sb.left, a.y + sb.top], end: [b.x + sb.left, b.y + sb.top] };
+    });
+    return { hub: [hub.left + hub.width / 2, hub.bottom] as [number, number], cards: cards.map((c) => [c.left + c.width / 2, c.top] as [number, number]), lines: lines as { start: [number, number]; end: [number, number] }[] };
+  });
+  geo.lines.forEach((l, i) => {
+    expect(Math.abs(l.start[0] - geo.hub[0])).toBeLessThan(1.5);
+    expect(Math.abs(l.start[1] - geo.hub[1])).toBeLessThan(1.5);
+    expect(Math.abs(l.end[0] - geo.cards[i]![0])).toBeLessThan(1.5);
+    expect(Math.abs(l.end[1] - geo.cards[i]![1])).toBeLessThan(1.5);
+  });
+  // amostra o núcleo do pulso durante o percurso: distância à curva < 2 px
+  const maxDist = await page.evaluate(async () => {
+    const svg = document.querySelector("#integracoes svg[data-active]") as SVGSVGElement;
+    const sb = () => svg.getBoundingClientRect();
+    let worst = 0, samples = 0;
+    const t0 = performance.now();
+    while (performance.now() - t0 < 4200) {
+      for (const g of svg.querySelectorAll("[data-line]")) {
+        const core = g.querySelector("[data-pulse]") as SVGCircleElement;
+        if (Number(getComputedStyle(core).opacity) < 0.5) continue;
+        const cb = core.getBoundingClientRect(), b = sb();
+        const x = cb.left + cb.width / 2 - b.left, y = cb.top + cb.height / 2 - b.top;
+        const path = g.querySelector("path") as SVGPathElement, L = path.getTotalLength();
+        let best = Infinity;
+        for (let s = 0; s <= L; s += 1) { const p = path.getPointAtLength(s); best = Math.min(best, Math.hypot(p.x - x, p.y - y)); }
+        worst = Math.max(worst, best); samples++;
+      }
+      await new Promise((r) => setTimeout(r, 90));
+    }
+    return { worst, samples };
+  });
+  expect(maxDist.samples).toBeGreaterThan(20);
+  expect(maxDist.worst).toBeLessThan(2);
+}
+
+for (const vp of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+  test(`integrações ${vp.width}px: pulsos saem do centro, seguem a linha e chegam ao card certo`, async ({ page }) => {
+    await page.setViewportSize(vp);
+    await page.goto("/");
+    await checkConnectors(page);
+    // decorativo: fora do teclado e sem interceptar cliques
+    const svg = page.locator("#integracoes svg[data-active]");
+    await expect(svg).toHaveAttribute("aria-hidden", "true");
+    expect(await svg.evaluate((el) => getComputedStyle(el).pointerEvents)).toBe("none");
+  });
+}
+
+test("integrações: pausa fora da tela e só linhas estáticas com movimento reduzido", async ({ page, browser }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const svg = page.locator("#integracoes svg[data-active]");
+  await expect(svg).toHaveAttribute("data-active", "false"); // abertura: seção fora da tela
+  const paused = await page.evaluate(() => [...document.querySelectorAll("#integracoes [data-pulse]")].map((c) => getComputedStyle(c).animationPlayState));
+  expect(paused.every((s) => s === "paused")).toBe(true);
+  await page.locator("#integracoes").scrollIntoViewIfNeeded();
+  await expect(svg).toHaveAttribute("data-active", "true");
+
+  const ctx = await browser.newContext({ reducedMotion: "reduce", viewport: { width: 1440, height: 900 } });
+  const p2 = await ctx.newPage();
+  await p2.goto(page.url());
+  await p2.locator("#integracoes").scrollIntoViewIfNeeded();
+  await expect(p2.locator("#integracoes [data-line]")).toHaveCount(4);
+  const vis = await p2.evaluate(() => ({
+    pulses: [...document.querySelectorAll("#integracoes [data-pulse]")].map((c) => getComputedStyle(c).display),
+    bases: [...document.querySelectorAll("#integracoes [data-line] > path:first-child")].map((c) => getComputedStyle(c).display),
+    anim: [...document.querySelectorAll("#integracoes [data-end]")].map((c) => getComputedStyle(c).animationName),
+  }));
+  expect(vis.pulses.every((d) => d === "none")).toBe(true);
+  expect(vis.bases.every((d) => d !== "none")).toBe(true);
+  expect(vis.anim.every((a) => a === "none")).toBe(true);
+  await ctx.close();
+});

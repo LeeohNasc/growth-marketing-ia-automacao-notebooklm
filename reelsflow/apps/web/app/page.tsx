@@ -3,6 +3,7 @@ import { Brand } from "./_landing/brand";
 import { TimeCalculator } from "./_landing/calculator";
 import { AUDIENCE, COMPARISON, FAQ, FEATURES, GLOSSARY, INTEGRATIONS, PLANS, TESTIMONIALS, USE_CASE_STEPS, type AvailabilityStatus } from "./_landing/content";
 import { BrandMark, BrandWordmark } from "@/components/logo";
+import { NetworkConnectors } from "./_landing/connectors";
 import { PanelDemo } from "./_landing/demo";
 import { LandingHeader } from "./_landing/header";
 import s from "./_landing/landing.module.css";
@@ -144,21 +145,17 @@ export default function LandingPage() {
         <section id="integracoes" className={`${s.section} ${s.integrationsSection}`} aria-labelledby="integ-title">
           <div className={s.container}>
             <div className={s.integrationsPanel}>
+              <NetworkConnectors />
               <h2 id="integ-title" className={s.panelTitle}>
                 Suas redes, <span className={s.underline}>um só painel</span>
               </h2>
-              <div className={s.hubCard} aria-hidden>
+              <div className={s.hubCard} aria-hidden data-hub>
                 <BrandMark className={s.hubCardMark} />
                 <BrandWordmark className={s.hubCardWordmark} />
               </div>
-              <svg className={s.connectors} viewBox="0 0 1000 120" preserveAspectRatio="none" aria-hidden focusable="false">
-                {[125, 375, 625, 875].map((x) => (
-                  <path key={x} d={`M500 0 C500 60 ${x} 40 ${x} 120`} />
-                ))}
-              </svg>
               <ul className={s.networks}>
                 {INTEGRATIONS.map((n) => (
-                  <li key={n.name} className={s.network}>
+                  <li key={n.name} className={s.network} data-network>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={n.icon} alt="" width={n.w} height={n.h} loading="lazy" decoding="async" className={s.networkIcon} />
                     <span className={s.networkName}>{n.name}</span>
