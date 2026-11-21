@@ -1,67 +1,305 @@
-import Link from "next/link";
-import { CalendarClock, ShieldCheck, UploadCloud } from "lucide-react";
-import { Logo } from "@/components/logo";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { Button } from "@/components/ui/button";
+import type { Metadata } from "next";
+import { Brand } from "./_landing/brand";
+import { TimeCalculator } from "./_landing/calculator";
+import { AUDIENCE, COMPARISON, FAQ, GLOSSARY, PLANS, TESTIMONIALS, USE_CASE_STEPS } from "./_landing/content";
+import { PanelDemo } from "./_landing/demo";
+import { LandingHeader } from "./_landing/header";
+import s from "./_landing/landing.module.css";
 
-const FEATURES = [
-  { icon: UploadCloud, title: "Envie uma vez", text: "Selecione dezenas de vídeos de uma só vez e acompanhe o progresso de cada um." },
-  { icon: CalendarClock, title: "Defina as regras", text: "Escolha frequência, horários e legendas padrão. O calendário é gerado automaticamente." },
-  { icon: ShieldCheck, title: "APIs oficiais", text: "Conexão por OAuth oficial. Nunca pedimos a senha das suas redes sociais." },
-];
+const TITLE = "ReelsFlow — vídeos curtos organizados e programados";
+const DESCRIPTION =
+  "Transforme uma pasta cheia de vídeos em uma semana de publicações planejadas. Organize, programe e acompanhe tudo em um só painel.";
 
-export default function HomePage() {
+export const metadata: Metadata = {
+  title: { absolute: TITLE },
+  description: DESCRIPTION,
+  // Prévia comercial (pré-lançamento): fora dos buscadores. Restrito a esta página.
+  robots: { index: false, follow: false },
+  openGraph: { type: "website", locale: "pt_BR", siteName: "ReelsFlow", title: TITLE, description: DESCRIPTION },
+  twitter: { card: "summary", title: TITLE, description: DESCRIPTION },
+};
+
+export default function LandingPage() {
   return (
-    <div className="flex min-h-dvh flex-col">
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
-        <Logo />
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
-          <Button asChild variant="ghost">
-            <Link href="/login">Entrar</Link>
-          </Button>
-          <Button asChild>
-            <Link href="/signup">Criar conta</Link>
-          </Button>
-        </div>
-      </header>
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center px-4 py-16 sm:px-6">
-        <p className="text-sm font-medium text-primary">Publicação automática de vídeos curtos</p>
-        <h1 className="mt-3 max-w-3xl text-4xl font-semibold tracking-tight sm:text-5xl">
-          Seus vídeos. Suas regras. Tudo no automático.
-        </h1>
-        <p className="mt-5 max-w-2xl text-lg text-muted-foreground">
-          Envie seus vídeos uma única vez, configure os horários e deixe o ReelsFlow organizar e publicar seu conteúdo
-          nas redes sociais conectadas.
-        </p>
-        <div className="mt-8 flex flex-wrap gap-3">
-          <Button asChild size="lg">
-            <Link href="/signup">Começar agora</Link>
-          </Button>
-          <Button asChild size="lg" variant="outline">
-            <Link href="/login">Já tenho conta</Link>
-          </Button>
-        </div>
-        <p className="mt-4 text-sm text-muted-foreground">
-          Em desenvolvimento. Integrações com redes sociais dependem de aprovação das plataformas.
-        </p>
-        <ul className="mt-16 grid gap-4 sm:grid-cols-3">
-          {FEATURES.map(({ icon: Icon, title, text }) => (
-            <li key={title} className="rounded-xl border bg-card p-5">
-              <Icon className="size-5 text-primary" aria-hidden />
-              <h2 className="mt-3 font-medium">{title}</h2>
-              <p className="mt-1 text-sm text-muted-foreground">{text}</p>
-            </li>
-          ))}
-        </ul>
+    <div className={s.root} id="topo">
+      <a href="#conteudo" className={s.skip}>
+        Ir para o conteúdo
+      </a>
+      <LandingHeader />
+
+      <main id="conteudo" tabIndex={-1}>
+        {/* Hero + demonstração */}
+        <section className={s.hero} aria-labelledby="hero-title">
+          <div className={s.container}>
+            <h1 id="hero-title" className={s.heroTitle}>
+              Seus vídeos prontos.
+              <br />
+              <span className={s.red}>A semana no automático.</span>
+            </h1>
+            <p className={s.heroLead}>
+              Transforme uma pasta cheia de vídeos em uma semana de publicações planejadas. Organize, programe e acompanhe tudo em um só painel.
+            </p>
+            <div className={s.ctaRow}>
+              <a href="#demonstracao" className={`${s.btn} ${s.btnPrimary}`}>
+                Explorar demonstração ↘
+              </a>
+              <a href="#planos" className={`${s.btn} ${s.btnGhost}`}>
+                Ver planos
+              </a>
+            </div>
+          </div>
+          <div id="demonstracao" className={s.demoWrap} aria-label="Demonstração do painel" role="region">
+            <PanelDemo />
+          </div>
+        </section>
+
+        {/* Como funciona */}
+        <section id="como" className={s.section} aria-labelledby="como-title">
+          <div className={s.container}>
+            <div className={s.sectionHead}>
+              <h2 id="como-title">Planeje uma vez. Acompanhe pelo painel.</h2>
+              <p>A proposta é reduzir a repetição de abrir o app, localizar o vídeo e lembrar do horário a cada postagem.</p>
+            </div>
+            <ol className={s.steps}>
+              <li className={s.card}>
+                <div className={s.thumb} aria-hidden>
+                  <span className={s.thumbFile}>▶ Corte do podcast.mp4</span>
+                  <span className={s.thumbFile}>▶ Bastidores.mp4</span>
+                </div>
+                <h3>Envie seus vídeos</h3>
+                <p>Reúna os arquivos que você quer incluir na programação.</p>
+              </li>
+              <li className={s.card}>
+                <div className={`${s.thumb} ${s.thumbSlots}`} aria-hidden>
+                  <span className={s.slot}>SEG 12:00</span>
+                  <span className={`${s.slot} ${s.slotActive}`}>TER 18:00</span>
+                  <span className={s.slot}>QUI 17:00</span>
+                </div>
+                <h3>Monte a programação</h3>
+                <p>Organize a sequência dos conteúdos e revise os horários.</p>
+              </li>
+              <li className={s.card}>
+                <div className={s.thumb} aria-hidden>
+                  <span className={s.thumbStatus}>
+                    Dica rápida <b className={s.badge_green}>Publicado</b>
+                  </span>
+                  <span className={s.thumbStatus}>
+                    Resumo da semana <b className={s.badge_amber}>Em revisão</b>
+                  </span>
+                </div>
+                <h3>Acompanhe os status</h3>
+                <p>Consulte a agenda e veja exemplos de publicações concluídas ou com falha na demonstração.</p>
+              </li>
+            </ol>
+          </div>
+        </section>
+
+        {/* Para quem é */}
+        <section id="publico" className={`${s.section} ${s.sectionAlt}`} aria-labelledby="publico-title">
+          <div className={s.container}>
+            <div className={s.sectionHead}>
+              <h2 id="publico-title">Para quem publica vídeos toda semana</h2>
+            </div>
+            <ul className={s.audience}>
+              {AUDIENCE.map((a) => (
+                <li key={a.title}>
+                  <h3>{a.title}</h3>
+                  <p>{a.text}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
+        {/* Calculadora */}
+        <section id="calculadora" className={s.section} aria-labelledby="calc-title">
+          <div className={s.container}>
+            <div className={s.sectionHead}>
+              <h2 id="calc-title">Quanto tempo você gasta publicando?</h2>
+              <p>Estime o tempo dedicado à publicação manual em um mês típico.</p>
+            </div>
+            <TimeCalculator />
+          </div>
+        </section>
+
+        {/* Caso de uso */}
+        <section id="exemplo" className={s.section} aria-labelledby="exemplo-title">
+          <div className={`${s.container} ${s.split}`}>
+            <div>
+              <h2 id="exemplo-title" className={s.splitTitle}>
+                Uma semana de cortes, organizada em um só lugar.
+              </h2>
+              <p className={s.lead}>
+                Imagine que você gravou um podcast e já separou os melhores trechos. Veja como poderia preparar a programação da semana no ReelsFlow.
+              </p>
+              <a href="#demonstracao" className={`${s.btn} ${s.btnGhost}`}>
+                Explorar calendário interativo ↗
+              </a>
+            </div>
+            <div className={s.card}>
+              <span className={s.demoTag}>Exemplo ilustrativo</span>
+              <h3 className={s.cardTitle}>Do episódio à programação</h3>
+              <ol className={s.numbered}>
+                {USE_CASE_STEPS.map((st, i) => (
+                  <li key={st.title}>
+                    <span className={s.num} aria-hidden>
+                      {i + 1}
+                    </span>
+                    <div>
+                      <h4>{st.title}</h4>
+                      <p>{st.text}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </div>
+        </section>
+
+        {/* Depoimentos ilustrativos */}
+        <section id="avaliacoes" className={s.section} aria-labelledby="aval-title">
+          <div className={s.container}>
+            <div className={s.sectionHead}>
+              <h2 id="aval-title">Como o ReelsFlow pode entrar na sua rotina</h2>
+            </div>
+            <p className={s.notice} role="note">
+              Depoimentos fictícios para demonstrar a página. Os nomes, comentários e notas são ilustrativos.
+            </p>
+            <ul className={s.testimonials}>
+              {TESTIMONIALS.map((t) => (
+                <li key={t.user} className={s.card}>
+                  <div className={s.person}>
+                    <span className={s.avatar} aria-hidden>
+                      {t.name[0]}
+                    </span>
+                    <div>
+                      <strong>{t.name}</strong>
+                      <span className={s.muted}>
+                        {t.user} · <span className={s.fictitious}>Perfil fictício</span>
+                      </span>
+                    </div>
+                  </div>
+                  <hr className={s.divider} />
+                  <span className={s.stars} role="img" aria-label="Nota ilustrativa: 5 de 5 estrelas">
+                    ★★★★★
+                  </span>
+                  <span className={s.role}>{t.role}</span>
+                  <blockquote>“{t.text}”</blockquote>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
+        {/* Planos */}
+        <section id="planos" className={s.section} aria-labelledby="planos-title">
+          <div className={s.container}>
+            <div className={s.sectionHead}>
+              <h2 id="planos-title">Planos do ReelsFlow</h2>
+              <p>Proposta para teste comercial. Os valores são mensais e as assinaturas ainda não estão abertas.</p>
+            </div>
+            <ul className={s.plans}>
+              {PLANS.map((p) => (
+                <li key={p.key} className={p.featured ? `${s.plan} ${s.planFeatured}` : s.plan} data-plan={p.key}>
+                  <h3>{p.name}</h3>
+                  <p className={s.muted}>{p.audience}</p>
+                  <p className={s.price}>
+                    {p.price}
+                    {p.period && <span>{p.period}</span>}
+                  </p>
+                  <hr className={s.divider} />
+                  <ul className={s.features}>
+                    {p.features.map((f) => (
+                      <li key={f}>{f}</li>
+                    ))}
+                  </ul>
+                  <p className={s.planStatus}>Assinaturas ainda não abertas</p>
+                </li>
+              ))}
+            </ul>
+
+            <details className={s.compare}>
+              <summary>Comparar todos os benefícios</summary>
+              <div className={s.tableWrap} role="region" aria-label="Tabela de comparação dos planos" tabIndex={0}>
+                <table>
+                  <caption>Limites e benefícios propostos</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Benefício</th>
+                      {PLANS.map((p) => (
+                        <th key={p.key} scope="col">
+                          {p.name}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {COMPARISON.map(([label, ...cells]) => (
+                      <tr key={label}>
+                        <th scope="row">{label}</th>
+                        {cells.map((c, i) => (
+                          <td key={i}>{c}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <dl className={s.glossary}>
+                {GLOSSARY.map((g) => (
+                  <div key={g.term}>
+                    <dt>{g.term}:</dt> <dd>{g.text}</dd>
+                  </div>
+                ))}
+              </dl>
+              <p className={s.muted}>
+                As quatro conexões propostas no Business comportam quatro perfis ou canais de uma mesma marca, conforme as integrações disponíveis. Os
+                recursos planejados dependem de implementação e homologação. Preços anuais seguem a definir.
+              </p>
+            </details>
+          </div>
+        </section>
+
+        {/* FAQ */}
+        <section id="faq" className={s.section} aria-labelledby="faq-title">
+          <div className={`${s.container} ${s.narrow}`}>
+            <div className={s.sectionHead}>
+              <h2 id="faq-title">Perguntas frequentes</h2>
+            </div>
+            <div className={s.faq}>
+              {FAQ.map((f) => (
+                <details key={f.q}>
+                  <summary>{f.q}</summary>
+                  <p>{f.a}</p>
+                </details>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* CTA final */}
+        <section className={s.finalCta} aria-labelledby="cta-title">
+          <div className={s.container}>
+            <h2 id="cta-title">Sua próxima semana começa aqui.</h2>
+            <p>Explore como uma semana de publicações pode ficar organizada no painel.</p>
+            <a href="#demonstracao" className={`${s.btn} ${s.btnPrimary}`}>
+              Explorar demonstração ↗
+            </a>
+          </div>
+        </section>
       </main>
-      <footer className="mx-auto flex w-full max-w-6xl gap-4 px-4 py-6 text-sm text-muted-foreground sm:px-6">
-        <a href="/privacy" className="hover:underline">
-          Privacidade
-        </a>
-        <a href="/terms" className="hover:underline">
-          Termos
-        </a>
+
+      <footer className={s.footer}>
+        <div className={`${s.container} ${s.footerInner}`}>
+          <Brand />
+          <span className={s.muted}>Prévia comercial do produto</span>
+          <nav aria-label="Rodapé" className={s.footerNav}>
+            <a href="#faq">Perguntas frequentes</a>
+            <a href="/privacy">Privacidade</a>
+            <a href="/terms">Termos</a>
+            <a href="/login">Entrar</a>
+          </nav>
+        </div>
       </footer>
     </div>
   );

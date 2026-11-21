@@ -3,8 +3,11 @@ import { expect, test } from "@playwright/test";
 test.describe("páginas públicas", () => {
   test("landing apresenta proposta e chamadas", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Seus vídeos. Suas regras. Tudo no automático.");
-    await expect(page.getByRole("link", { name: "Começar agora" })).toHaveAttribute("href", "/signup");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Seus vídeos prontos.A semana no automático.");
+    await expect(page.getByRole("link", { name: "Explorar demonstração ↘" })).toHaveAttribute("href", "#demonstracao");
+    // "Entrar" fica no header (desktop) ou no menu (celular) e no rodapé
+    await expect(page.getByRole("contentinfo").getByRole("link", { name: "Entrar" })).toHaveAttribute("href", "/login");
+    expect(await page.locator('header a[href="/login"]').count()).toBeGreaterThan(0);
     await expect(page.locator("html")).toHaveClass(/dark/);
   });
 
@@ -17,7 +20,8 @@ test.describe("páginas públicas", () => {
   });
 
   test("alterna para tema claro", async ({ page }) => {
-    await page.goto("/");
+    // A landing é sempre escura (identidade da marca); o seletor de tema segue nas telas do app.
+    await page.goto("/login");
     await page.getByRole("button", { name: "Ativar tema claro" }).click();
     await expect(page.locator("html")).not.toHaveClass(/dark/);
   });

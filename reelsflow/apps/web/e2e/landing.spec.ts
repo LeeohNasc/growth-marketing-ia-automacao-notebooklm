@@ -1,0 +1,265 @@
+import { mkdirSync } from "node:fs";
+import path from "node:path";
+import { expect, test, type Page } from "@playwright/test";
+
+/** Landing page comercial (rota "/"). Viewports explícitos; roda só no projeto "desktop" para não duplicar. */
+test.beforeEach(({}, info) => test.skip(info.project.name !== "desktop", "viewports definidos no próprio teste"));
+
+const SHOTS = path.join(process.cwd(), "test-results", "landing");
+mkdirSync(SHOTS, { recursive: true });
+const HEADER_H = 74;
+
+async function headingBelowHeader(page: Page, id: string) {
+  // a rolagem é suave: espera assentar com o título logo abaixo do header fixo
+  await expect
+    .poll(async () => {
+      const top = await page.evaluate((i) => document.getElementById(i)!.querySelector("h2")!.getBoundingClientRect().top, id);
+      return top >= HEADER_H && top < HEADER_H + 120;
+    }, { timeout: 5000 })
+    .toBe(true);
+}
+
+test("estrutura, SEO e um único H1", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await expect(page).toHaveTitle(/ReelsFlow/);
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
+  await expect(page.locator('meta[property="og:title"]')).toHaveAttribute("content", /ReelsFlow/);
+  await expect(page.locator('meta[name="description"]')).toHaveAttribute("content", /semana de publicações planejadas/);
+  await expect(page.locator("h1")).toHaveCount(1);
+  await expect(page.getByRole("banner")).toBeVisible();
+  await expect(page.getByRole("main")).toBeVisible();
+  await expect(page.getByRole("contentinfo")).toBeVisible();
+  // ordem das seções
+  const ids = await page.evaluate(() => [...document.querySelectorAll("main section[id], main [id='demonstracao']")].map((e) => e.id));
+  expect(ids).toEqual(["demonstracao", "como", "publico", "calculadora", "exemplo", "avaliacoes", "planos", "faq"]);
+  // páginas de login seguem existindo e não são afetadas
+  const login = await page.request.get("/login");
+  expect(login.status()).toBe(200);
+});
+
+test("link de salto aparece com foco e leva ao conteúdo", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.keyboard.press("Tab");
+  const skip = page.getByRole("link", { name: "Ir para o conteúdo" });
+  await expect(skip).toBeFocused();
+  expect((await skip.boundingBox())!.y).toBeGreaterThanOrEqual(0);
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/#conteudo$/);
+});
+
+test("header desktop: navegação, destinos e âncoras abaixo do header fixo", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const nav = page.getByRole("navigation", { name: "Principal" });
+  for (const [name, id] of [["Como funciona", "como"], ["Para quem é", "publico"], ["Planos", "planos"], ["Perguntas frequentes", "faq"]] as const) {
+    await nav.getByRole("link", { name }).click();
+    await expect(page).toHaveURL(new RegExp(`#${id}$`));
+    await headingBelowHeader(page, id);
+    await expect(page.getByRole("banner")).toBeInViewport();
+  }
+  await page.getByRole("banner").getByRole("link", { name: "Ver planos" }).click();
+  await expect(page).toHaveURL(/#planos$/);
+  await page.getByRole("banner").getByRole("link", { name: /ReelsFlow/ }).click();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeLessThan(5);
+});
+
+test("header celular: menu abre, leva ao destino e fecha", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await expect(page.getByRole("navigation", { name: "Principal" })).toBeHidden();
+  const menu = page.getByRole("button", { name: "Menu" });
+  await expect(menu).toHaveAttribute("aria-expanded", "false");
+  await menu.click();
+  const mobile = page.getByRole("navigation", { name: "Menu" });
+  await expect(mobile).toBeVisible();
+  await expect(mobile.getByRole("link")).toHaveText(["Demonstração", "Como funciona", "Para quem é", "Planos", "Perguntas frequentes", "Entrar"]);
+  await mobile.getByRole("link", { name: "Planos" }).click();
+  await expect(mobile).toBeHidden();
+  await expect(page).toHaveURL(/#planos$/);
+  await headingBelowHeader(page, "planos");
+  // Escape fecha e devolve o foco
+  await page.getByRole("button", { name: "Menu" }).click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("navigation", { name: "Menu" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Menu" })).toBeFocused();
+});
+
+test("demonstração: telas alternam com aria-pressed e mostram os dados", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const demo = page.getByRole("region", { name: "Demonstração do painel" });
+  await expect(demo.getByText("ReelsFlow", { exact: true })).toBeVisible();
+  await expect(demo.getByText("Dados ilustrativos")).toBeVisible();
+  const tab = (n: string) => demo.getByRole("button", { name: n, exact: true });
+  await expect(tab("Calendário")).toHaveAttribute("aria-pressed", "true");
+  await expect(demo.getByRole("heading", { name: "Calendário de publicações" })).toBeVisible();
+  await expect(demo.getByText("18–22 de maio")).toBeVisible();
+  for (const v of ["Corte do podcast", "Melhores momentos", "Bastidores"]) await expect(demo.getByRole("button", { name: new RegExp(v) })).toBeVisible();
+
+  await tab("Biblioteca").click();
+  await expect(tab("Biblioteca")).toHaveAttribute("aria-pressed", "true");
+  await expect(tab("Calendário")).toHaveAttribute("aria-pressed", "false");
+  await expect(demo.getByRole("heading", { name: "Vídeos da semana" })).toBeVisible();
+  await expect(demo.getByRole("listitem")).toHaveText([/Corte do podcast.*00:42.*Na programação/, /Bastidores da gravação.*00:27.*Pronto para organizar/]);
+
+  await tab("Histórico").click();
+  await expect(demo.getByRole("heading", { name: "Publicações anteriores" })).toBeVisible();
+  await expect(demo.getByRole("listitem")).toHaveText([/Dica rápida.*Sex · 12h.*Publicado/, /Resumo da semana.*Sáb · 18h.*Falha no envio/]);
+  await expect(demo.locator("[aria-live='polite']")).toHaveText("Exibindo Histórico");
+});
+
+test("detalhe do calendário abre e fecha por mouse e teclado, devolvendo o foco", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const ev = page.getByRole("button", { name: /Bastidores/ });
+  await ev.click();
+  const dlg = page.getByRole("dialog", { name: "Bastidores" });
+  await expect(dlg).toBeVisible();
+  await expect(dlg.getByText("Agendamento ilustrativo")).toBeVisible();
+  await expect(dlg).toContainText("Qui 21");
+  await expect(dlg).toContainText("17:00");
+  await expect(dlg).toContainText("Em revisão");
+  await page.keyboard.press("Escape");
+  await expect(dlg).toBeHidden();
+  await expect(ev).toBeFocused();
+
+  const first = page.getByRole("button", { name: /Corte do podcast/ });
+  await first.focus();
+  await page.keyboard.press("Enter");
+  const d2 = page.getByRole("dialog", { name: "Corte do podcast" });
+  await expect(d2).toContainText("Seg 18");
+  await d2.getByRole("button", { name: "Fechar detalhes" }).click();
+  await expect(d2).toBeHidden();
+  await expect(first).toBeFocused();
+});
+
+test("demonstração no celular: controles acima, agenda compacta sem dias vazios", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  const demo = page.getByRole("region", { name: "Demonstração do painel" });
+  const tabs = await demo.getByRole("group", { name: "Telas da demonstração" }).boundingBox();
+  const head = await demo.getByRole("heading", { name: "Calendário de publicações" }).boundingBox();
+  expect(tabs!.y + tabs!.height).toBeLessThanOrEqual(head!.y);
+  await expect(demo.getByText("Qua 20")).toBeHidden();
+  await expect(demo.getByText("Sex 22")).toBeHidden();
+  await expect(demo.getByText("Seg 18")).toBeVisible();
+  await demo.getByRole("button", { name: /Melhores momentos/ }).click();
+  await expect(page.getByRole("dialog", { name: "Melhores momentos" })).toContainText("Ter 19");
+  await page.keyboard.press("Escape");
+});
+
+test("calculadora: estado inicial, presets, minutos, singular e inválido", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const out = page.getByTestId("calc-result");
+  await expect(out).toHaveText("5 horas por mês");
+  await expect(out).toHaveAttribute("aria-live", "polite");
+  const cases = [["1 vídeo por dia", "1,33 horas por mês"], ["3 vídeos por dia", "5 horas por mês"], ["6 vídeos por dia", "10 horas por mês"]] as const;
+  for (const [preset, text] of cases) {
+    await page.getByRole("button", { name: preset }).click();
+    await expect(page.getByRole("button", { name: preset })).toHaveAttribute("aria-pressed", "true");
+    await expect(out).toHaveText(text);
+  }
+  const set = async (v: string, m: string, d: string) => {
+    await page.getByLabel("Vídeos por dia").fill(v);
+    await page.getByLabel("Minutos por vídeo").fill(m);
+    await page.getByLabel("Dias por mês").fill(d);
+  };
+  await set("1", "4", "10");
+  await expect(out).toHaveText("40 minutos por mês");
+  await set("1", "1", "1");
+  await expect(out).toHaveText("1 minuto por mês");
+  await set("1", "2.5", "3");
+  await expect(out).toHaveText("7,5 minutos por mês");
+  await set("1", "60", "1");
+  await expect(out).toHaveText("1 hora por mês");
+  await set("1000", "1440", "31");
+  await expect(out).toHaveText("744.000 horas por mês");
+  await page.getByLabel("Vídeos por dia").fill("");
+  await expect(out).toHaveText("Preencha os campos com valores válidos.");
+  await set("3", "4", "32");
+  await expect(out).toHaveText("Preencha os campos com valores válidos.");
+});
+
+test("planos, comparação, glossário e avisos", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const planos = page.locator("#planos");
+  await expect(planos).toContainText("as assinaturas ainda não estão abertas");
+  const price = (k: string) => planos.locator(`[data-plan='${k}']`);
+  await expect(price("starter")).toContainText("Grátis");
+  await expect(price("pro")).toContainText("R$ 99,90/mês");
+  await expect(price("business")).toContainText("R$ 299,90/mês");
+  await expect(price("premium")).toContainText("R$ 799,90/mês");
+  await expect(price("premium")).toContainText("no roteiro de desenvolvimento");
+  // nada de checkout simulado nem preço anual
+  await expect(planos.getByRole("button")).toHaveCount(0);
+  await expect(page.locator("body")).not.toContainText(/anual\s*R\$/i);
+
+  const table = planos.getByRole("table");
+  await expect(table).toBeHidden();
+  await planos.getByText("Comparar todos os benefícios").click();
+  await expect(table).toBeVisible();
+  await expect(table.locator("caption")).toHaveText("Limites e benefícios propostos");
+  await expect(table.locator("thead th[scope='col']")).toHaveCount(5);
+  await expect(table.locator("tbody th[scope='row']")).toHaveCount(12);
+  await expect(table.getByRole("row", { name: /Contas sociais/ })).toContainText("1 (limitada)");
+  await expect(planos).toContainText("Workspace: ambiente de trabalho");
+  await expect(planos).toContainText("Preços anuais seguem a definir.");
+
+  await expect(page.locator("#avaliacoes")).toContainText("Depoimentos fictícios para demonstrar a página.");
+  await expect(page.locator("#avaliacoes").getByText("Perfil fictício")).toHaveCount(3);
+  await expect(page.locator("#avaliacoes").getByRole("img", { name: /Nota ilustrativa/ })).toHaveCount(3);
+});
+
+test("FAQ: acordeão por teclado", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const faq = page.locator("#faq");
+  await expect(faq.locator("summary")).toHaveCount(6);
+  const q = faq.locator("summary", { hasText: "O que acontece se uma publicação falhar?" });
+  const answer = faq.getByText("O histórico ilustrativo mostra como uma falha pode aparecer.");
+  await expect(answer).toBeHidden();
+  await q.focus();
+  await page.keyboard.press("Enter");
+  await expect(answer).toBeVisible();
+  await page.keyboard.press("Space");
+  await expect(answer).toBeHidden();
+});
+
+for (const [w, h] of [[320, 640], [390, 844], [768, 1024], [1440, 900]] as const) {
+  test(`sem estouro de largura em ${w}px (só a tabela rola por dentro)`, async ({ page }) => {
+    await page.setViewportSize({ width: w, height: h });
+    await page.goto("/");
+    await page.locator("#planos summary").click();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    // nenhum elemento visível ultrapassa a largura (exceto o conteúdo da tabela, que rola no contêiner)
+    const offenders = await page.evaluate(() =>
+      [...document.querySelectorAll("body *")]
+        .filter((e) => !e.closest("table") && !e.closest("dialog") && (e as HTMLElement).offsetParent !== null)
+        .filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && (r.right > window.innerWidth + 1 || r.left < -1); })
+        .map((e) => `${e.tagName}.${(e as HTMLElement).className}`)
+        .slice(0, 5),
+    );
+    expect(offenders).toEqual([]);
+    if (w <= 768) {
+      const scrollable = await page.locator("#planos [role='region']").evaluate((el) => el.scrollWidth > el.clientWidth);
+      expect(scrollable).toBe(true);
+    }
+  });
+}
+
+test("capturas desktop (1440) e celular (390)", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.evaluate(() => document.fonts.ready);
+  await page.screenshot({ path: path.join(SHOTS, "landing-1440-hero.png") });
+  await page.screenshot({ path: path.join(SHOTS, "landing-1440-full.png"), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  await page.evaluate(() => document.fonts.ready);
+  await page.screenshot({ path: path.join(SHOTS, "landing-390-hero.png") });
+  await page.screenshot({ path: path.join(SHOTS, "landing-390-full.png"), fullPage: true });
+});
