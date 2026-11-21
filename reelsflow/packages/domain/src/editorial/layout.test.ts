@@ -151,3 +151,22 @@ describe("compatibilidade de imagem", () => {
     expect(evaluateImageCompatibility({ width: 1080, height: 1350, format: "jpeg" }, 9 * 1024 * 1024).platforms.instagram_reels.status).toBe("error");
   });
 });
+
+import { rgbaToI420Limited } from "./yuv";
+describe("RGBA → I420 faixa limitada BT.709", () => {
+  const px = (r: number, g: number, b: number, w = 2, h = 2) => Uint8ClampedArray.from({ length: w * h * 4 }, (_, i) => [r, g, b, 255][i % 4]!);
+  it("branco = (235,128,128); preto = (16,128,128); cinza neutro mantém croma 128", () => {
+    expect(Array.from(rgbaToI420Limited(px(255, 255, 255), 2, 2))).toEqual([235, 235, 235, 235, 128, 128]);
+    expect(Array.from(rgbaToI420Limited(px(0, 0, 0), 2, 2))).toEqual([16, 16, 16, 16, 128, 128]);
+    const g = rgbaToI420Limited(px(128, 128, 128), 2, 2);
+    expect([g[4], g[5]]).toEqual([128, 128]);
+  });
+  it("vermelho e azul puros: valores BT.709 de referência", () => {
+    expect(Array.from(rgbaToI420Limited(px(255, 0, 0), 2, 2))).toEqual([63, 63, 63, 63, 102, 240]);
+    expect(Array.from(rgbaToI420Limited(px(0, 0, 255), 2, 2))).toEqual([32, 32, 32, 32, 240, 118]);
+  });
+  it("tamanho do buffer e recusa de dimensões ímpares", () => {
+    expect(rgbaToI420Limited(px(1, 2, 3, 4, 2), 4, 2).length).toBe(8 + 2 + 2);
+    expect(() => rgbaToI420Limited(px(0, 0, 0, 3, 2), 3, 2)).toThrow();
+  });
+});
