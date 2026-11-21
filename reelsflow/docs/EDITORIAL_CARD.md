@@ -62,9 +62,19 @@ editor (navegador) ── rascunho ──► editorial_cards (RLS) + origens em 
 | Worker (análise de JPEG real/progressivo/falso, modo remoto, **agendador publica o render final**) — `pg` e `postgres.js` | 78/78 |
 | Renderização real no Chromium (PNG/JPEG/MP4 inspecionados por pixel e `ffprobe`) | 11/11 |
 | Editor real (interface) com Supabase falso: 3 formatos, salvar, render, envio do arquivo final, falha/nova tentativa, vídeo, celular | 5/5 |
+| Layout do editor (1366×768, 1920×1080, tablets 820×1180/1024×768, celular 390×844): prévia fixa e inteira, rolagem própria do formulário, teclado, edição durante a reprodução, teclado virtual | 12/12 |
 | E2E existentes do app (regressão, desktop + celular) | 64/64 |
 
 Não executado: editor contra o Supabase real (a migration 11 não está em produção) e publicação real.
+
+## Layout do editor
+
+- Desktop/tablet (≥ 768 px): duas colunas com altura da janela. O formulário rola sozinho (barra discreta,
+  `.scrollbar-rf`); a prévia fica fixa, centralizada e encolhe para caber na altura disponível sem cortar
+  (9:16, 4:5, 1:1). O canvas mantém a resolução real; só o CSS o reduz — o arquivo exportado não muda.
+- Celular: prévia compacta fixa abaixo do cabeçalho, com **Ampliar/Reduzir** e **Recolher/Mostrar**; ao
+  focar um campo de texto ela recolhe sozinha (teclado virtual) e volta ao sair.
+- Editar texto ou imagens durante a reprodução não para nem reinicia o vídeo da prévia.
 
 ## Limites conhecidos
 

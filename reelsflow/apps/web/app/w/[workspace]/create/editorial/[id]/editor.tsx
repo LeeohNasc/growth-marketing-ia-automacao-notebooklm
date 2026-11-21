@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Copy, Download, ImageIcon, Loader2, Pause, Play, Save, Sparkles, Trash2, Volume2, VolumeX } from "lucide-react";
+import { ChevronDown, ChevronUp, Copy, Download, ImageIcon, Loader2, Maximize2, Minimize2, Pause, Play, Save, Sparkles, Trash2, Volume2, VolumeX } from "lucide-react";
 import {
   CARD_FORMATS,
   CARD_FORMAT_KEYS,
@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Input, NativeSelect } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
 import type { CardRenderStatus, EditorialCardRow } from "@/lib/database.types";
 import type { Drawable } from "@/lib/editorial/draw";
 import { CardRenderError, renderCardImage, renderCardVideo, type CardRenderInput } from "@/lib/editorial/export";
@@ -175,26 +176,32 @@ export function EditorialEditor(props: {
     return () => cancelAnimationFrame(raf);
   }, [draw]);
 
-  // Enquanto o vídeo toca, redesenha a cada quadro.
+  // Enquanto o vídeo toca, redesenha a cada quadro. O desenho mais recente fica num ref: editar
+  // texto/foto durante a reprodução atualiza o próximo quadro SEM reiniciar nem pausar o vídeo.
+  const drawRef = useRef(draw);
+  useEffect(() => {
+    drawRef.current = draw;
+  }, [draw]);
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
     let raf = 0;
     const loop = () => {
-      draw();
+      drawRef.current();
       setTime({ t: v.currentTime, d: v.duration || 0 });
       if (!v.paused && !v.ended) raf = requestAnimationFrame(loop);
     };
     const onPlay = () => {
       setPlaying(true);
+      cancelAnimationFrame(raf);
       raf = requestAnimationFrame(loop);
     };
     const onStop = () => {
       setPlaying(false);
-      draw();
+      drawRef.current();
     };
     const onSeek = () => {
-      draw();
+      drawRef.current();
       setTime({ t: v.currentTime, d: v.duration || 0 });
     };
     v.addEventListener("play", onPlay);
@@ -202,6 +209,7 @@ export function EditorialEditor(props: {
     v.addEventListener("ended", onStop);
     v.addEventListener("seeked", onSeek);
     v.addEventListener("loadeddata", onSeek);
+    if (!v.paused && !v.ended) onPlay();
     return () => {
       cancelAnimationFrame(raf);
       v.removeEventListener("play", onPlay);
@@ -210,7 +218,25 @@ export function EditorialEditor(props: {
       v.removeEventListener("seeked", onSeek);
       v.removeEventListener("loadeddata", onSeek);
     };
-  }, [draw, videoUrl]);
+  }, [videoUrl]);
+
+  // Celular: prévia compacta (padrão), expandida ou recolhida. Ao digitar num campo de texto, recolhe
+  // para o teclado virtual não esconder o campo; ao sair do campo, volta ao modo anterior.
+  const [previewMode, setPreviewMode] = useState<"compact" | "expanded" | "collapsed">("compact");
+  const modeBeforeTyping = useRef<"compact" | "expanded" | "collapsed" | null>(null);
+  const isSmall = () => typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
+  const isTextField = (el: EventTarget | null) =>
+    el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && ["text", "search", "url", "email", ""].includes(el.type));
+  const onFormFocus = (e: React.FocusEvent) => {
+    if (!isSmall() || !isTextField(e.target) || previewMode === "collapsed") return;
+    modeBeforeTyping.current = previewMode;
+    setPreviewMode("collapsed");
+  };
+  const onFormBlur = (e: React.FocusEvent) => {
+    if (!isSmall() || !isTextField(e.target) || isTextField(e.relatedTarget)) return;
+    if (modeBeforeTyping.current) setPreviewMode(modeBeforeTyping.current);
+    modeBeforeTyping.current = null;
+  };
 
   const pick = async (kind: SourceKind, file: File | undefined, set: (s: Slot) => void) => {
     if (!file) return;
@@ -360,9 +386,16 @@ export function EditorialEditor(props: {
   const filesDisabled = !props.canEdit || loadingSources;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(340px,440px)_1fr]">
-      {/* Controles */}
-      <form className="order-2 grid content-start gap-5 lg:order-1" onSubmit={(e) => e.preventDefault()} aria-label="Configuração do card">
+    <div className="grid gap-4 md:h-full md:min-h-0 md:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)] md:grid-rows-[minmax(0,1fr)] md:gap-6 lg:grid-cols-[minmax(360px,460px)_minmax(0,1fr)]">
+      {/* Controles: rolagem própria no tablet/desktop (a prévia não se move) */}
+      <form
+        className="scrollbar-rf relative order-3 grid content-start gap-5 md:order-1 md:min-h-0 md:overflow-y-auto md:overscroll-contain md:pr-3"
+        style={{ scrollPaddingBlock: "1rem" }}
+        onSubmit={(e) => e.preventDefault()}
+        onFocusCapture={onFormFocus}
+        onBlurCapture={onFormBlur}
+        aria-label="Configuração do card"
+      >
         <section className="grid gap-3 rounded-xl border p-4">
           <h2 className="font-medium">Card</h2>
           <div className="grid gap-1.5">
@@ -373,7 +406,7 @@ export function EditorialEditor(props: {
             <legend className="mb-1 text-sm font-medium">Formato</legend>
             <div className="grid grid-cols-3 gap-2">
               {CARD_FORMAT_KEYS.map((f) => (
-                <label key={f} className="flex cursor-pointer flex-col items-center gap-1 rounded-md border px-2 py-2 text-center text-xs has-[:checked]:border-primary has-[:checked]:bg-primary/10">
+                <label key={f} className="relative flex cursor-pointer flex-col items-center gap-1 rounded-md border px-2 py-2 text-center text-xs has-[:checked]:border-primary has-[:checked]:bg-primary/10 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring">
                   <input type="radio" name="format" className="sr-only" checked={format === f} onChange={() => (setFormat(f), setShowSafe(f === "vertical"), touch())} disabled={!props.canEdit} />
                   <span className="font-medium">{f === "feed" ? "Feed 4:5" : f === "square" ? "Quadrado 1:1" : "Vertical 9:16"}</span>
                   <span className="text-muted-foreground">
@@ -449,7 +482,7 @@ export function EditorialEditor(props: {
             <legend className="sr-only">Tipo de mídia</legend>
             <div className="flex flex-wrap gap-2">
               {(["image", "image_pair", "video"] as const).map((k) => (
-                <label key={k} className="cursor-pointer rounded-md border px-3 py-1.5 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/10">
+                <label key={k} className="relative cursor-pointer rounded-md border px-3 py-1.5 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/10 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring">
                   <input type="radio" name="kind" className="sr-only" checked={mediaKind === k} onChange={() => (setMediaKind(k), setMedia([emptySlot(), emptySlot()]), touch())} disabled={!props.canEdit} />
                   {KIND_LABEL[k]}
                 </label>
@@ -485,7 +518,7 @@ export function EditorialEditor(props: {
             <legend className="mb-1 text-sm font-medium">Enquadramento</legend>
             <div className="flex flex-wrap gap-2">
               {(["cover", "contain"] as const).map((f) => (
-                <label key={f} className="cursor-pointer rounded-md border px-3 py-1.5 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/10">
+                <label key={f} className="relative cursor-pointer rounded-md border px-3 py-1.5 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/10 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring">
                   <input type="radio" name="fit" className="sr-only" checked={fit === f} onChange={() => (setFit(f), touch())} disabled={!props.canEdit} />
                   {f === "cover" ? "Preencher (recortar)" : "Mostrar tudo"}
                 </label>
@@ -542,20 +575,54 @@ export function EditorialEditor(props: {
         </section>
       </form>
 
-      {/* Prévia */}
-      <div className="order-1 grid content-start gap-3 lg:sticky lg:top-4 lg:order-2">
+      {/* Prévia: fixa (coluna de altura da janela) e redimensionada para caber inteira */}
+      <section aria-label="Prévia do card" className="max-md:contents md:order-2 md:flex md:min-h-0 md:flex-col md:gap-3">
+        {/* No celular só este bloco fica fixo no topo (prévia compacta); ações e formulário rolam abaixo. */}
+        <div className="flex min-h-0 flex-col gap-3 max-md:sticky max-md:top-14 max-md:z-20 max-md:order-1 max-md:-mx-4 max-md:border-b max-md:bg-background/95 max-md:px-4 max-md:pb-3 max-md:pt-2 max-md:backdrop-blur md:flex-1">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Badge variant={STATUS[status].variant}>{STATUS[status].label}</Badge>
             {dirty && <Badge variant="outline">Alterações não salvas</Badge>}
             {!dirty && status === "draft" && renderedMediaId && <Badge variant="outline">Aguardando nova renderização</Badge>}
           </div>
-          <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            <input type="checkbox" checked={showSafe} onChange={(e) => setShowSafe(e.target.checked)} /> Guias de área segura (só na prévia)
-          </label>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <input type="checkbox" checked={showSafe} onChange={(e) => setShowSafe(e.target.checked)} /> Área segura
+            </label>
+            <span className="flex gap-1 md:hidden">
+              {previewMode !== "collapsed" && (
+                <Button type="button" size="sm" variant="outline" onClick={() => setPreviewMode(previewMode === "expanded" ? "compact" : "expanded")} aria-expanded={previewMode === "expanded"}>
+                  {previewMode === "expanded" ? <Minimize2 /> : <Maximize2 />}
+                  {previewMode === "expanded" ? "Reduzir" : "Ampliar"}
+                </Button>
+              )}
+              <Button type="button" size="sm" variant="outline" onClick={() => setPreviewMode(previewMode === "collapsed" ? "compact" : "collapsed")} aria-controls="ec-preview-stage" aria-expanded={previewMode !== "collapsed"}>
+                {previewMode === "collapsed" ? <ChevronDown /> : <ChevronUp />}
+                {previewMode === "collapsed" ? "Mostrar prévia" : "Recolher"}
+              </Button>
+            </span>
+          </div>
         </div>
-        <div className="mx-auto w-full overflow-hidden rounded-xl border bg-white shadow-sm" style={{ maxWidth: format === "vertical" ? 380 : 520 }}>
-          <canvas ref={canvasRef} width={dims.width} height={dims.height} className="block h-auto w-full" role="img" aria-label={`Prévia do card ${dims.width}×${dims.height}: ${pageName} @${normalizeUsername(username)} — ${headline}`} />
+        <div
+          id="ec-preview-stage"
+          data-mode={previewMode}
+          className={cn(
+            "flex min-h-0 items-center justify-center rounded-xl border bg-muted/40 p-3 md:flex-1",
+            previewMode === "collapsed" && "max-md:hidden",
+            previewMode === "compact" && "max-md:h-[38dvh]",
+            previewMode === "expanded" && "max-md:h-[72dvh]",
+          )}
+        >
+          {/* O canvas tem a resolução REAL do formato; o CSS só reduz para caber (proporção preservada). */}
+          <canvas
+            ref={canvasRef}
+            width={dims.width}
+            height={dims.height}
+            className="block h-auto max-h-full w-auto max-w-full rounded-lg bg-white shadow-sm"
+            style={{ aspectRatio: `${dims.width} / ${dims.height}` }}
+            role="img"
+            aria-label={`Prévia do card ${dims.width}×${dims.height}: ${pageName} @${normalizeUsername(username)} — ${headline}`}
+          />
         </div>
         {loadingSources && (
           <p className="flex items-center justify-center gap-2 text-xs text-muted-foreground" aria-live="polite">
@@ -563,7 +630,7 @@ export function EditorialEditor(props: {
           </p>
         )}
         {mediaKind === "video" && videoUrl && (
-          <div className="mx-auto flex w-full max-w-[520px] items-center gap-2">
+          <div className={cn("mx-auto flex w-full max-w-[560px] shrink-0 items-center gap-2", previewMode === "collapsed" && "max-md:hidden")}>
             <video ref={videoRef} src={videoUrl} muted={muted} playsInline preload="auto" className="hidden" />
             <Button type="button" size="icon" variant="outline" aria-label={playing ? "Pausar" : "Reproduzir"} onClick={() => (videoRef.current?.paused ? videoRef.current.play() : videoRef.current?.pause())}>
               {playing ? <Pause /> : <Play />}
@@ -586,8 +653,9 @@ export function EditorialEditor(props: {
             </Button>
           </div>
         )}
+        </div>
 
-        <div aria-live="polite" className="grid gap-2">
+        <div aria-live="polite" className="scrollbar-rf grid shrink-0 gap-2 max-md:order-2 md:max-h-40 md:overflow-y-auto">
           {notice && <Alert variant={notice.ok ? "success" : "destructive"}>{notice.text}</Alert>}
           {renderError && <Alert variant="destructive">Erro de render: {renderError} Você pode corrigir e renderizar de novo; o rascunho foi preservado.</Alert>}
           {exportBlockers.length > 0 && (
@@ -614,32 +682,29 @@ export function EditorialEditor(props: {
         </div>
 
         {props.canEdit && (
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={save} disabled={disabled}>
+          <div className="flex shrink-0 flex-wrap items-center gap-2 max-md:order-2 md:border-t md:pt-3">
+            <Button type="button" variant="outline" onClick={save} className="md:h-8 md:px-3" disabled={disabled}>
               <Save /> Salvar rascunho
             </Button>
-            <Button type="button" onClick={render} disabled={disabled || exportBlockers.length > 0} title={exportBlockers[0]}>
+            <Button type="button" onClick={render} className="md:h-8 md:px-3" disabled={disabled || exportBlockers.length > 0} title={exportBlockers[0]}>
               <Sparkles /> Renderizar arquivo final
             </Button>
-            <Button type="button" variant="outline" onClick={downloadPng} disabled={disabled || exportBlockers.length > 0}>
+            <Button type="button" variant="outline" onClick={downloadPng} className="md:h-8 md:px-3" disabled={disabled || exportBlockers.length > 0}>
               <ImageIcon /> Baixar PNG
             </Button>
-            <Button type="button" variant="outline" onClick={downloadFinal} disabled={disabled || (!lastRender && !props.renderedUrl)}>
+            <Button type="button" variant="outline" onClick={downloadFinal} className="md:h-8 md:px-3" disabled={disabled || (!lastRender && !props.renderedUrl)}>
               <Download /> Baixar arquivo final
             </Button>
             {ready ? (
-              <Button asChild variant="default">
+              <Button asChild variant="default" className="md:h-8 md:px-3">
                 <Link href={`/w/${props.slug}/campaigns/new?media=${renderedMediaId}`}>Agendar</Link>
               </Button>
             ) : (
-              <Button type="button" variant="secondary" disabled title="Disponível quando o arquivo final estiver pronto e sem alterações pendentes">
+              <Button type="button" variant="secondary" className="md:h-8 md:px-3" disabled title="Disponível quando o arquivo final estiver pronto e sem alterações pendentes">
                 Agendar
               </Button>
             )}
-          </div>
-        )}
-        {props.canEdit && (
-          <div className="flex flex-wrap gap-2 border-t pt-3">
+            <div className="flex gap-1 max-md:w-full max-md:border-t max-md:pt-3 md:ml-auto">
             <form action={duplicateCardAction}>
               <input type="hidden" name="slug" value={props.slug} />
               <input type="hidden" name="card" value={c.id} />
@@ -654,9 +719,10 @@ export function EditorialEditor(props: {
                 <Trash2 /> Excluir
               </Button>
             </form>
+            </div>
           </div>
         )}
-      </div>
+      </section>
     </div>
   );
 }

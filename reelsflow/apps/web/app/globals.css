@@ -106,3 +106,24 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Barra de rolagem discreta (painéis com rolagem própria, ex.: editor do Card Editorial). */
+.scrollbar-rf {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--muted-foreground) 55%, transparent) transparent;
+  scrollbar-gutter: stable;
+}
+.scrollbar-rf::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scrollbar-rf::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-rf::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--muted-foreground) 45%, transparent);
+  border-radius: 999px;
+}
+.scrollbar-rf::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}

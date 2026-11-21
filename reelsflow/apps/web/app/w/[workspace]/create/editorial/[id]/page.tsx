@@ -41,16 +41,19 @@ export default async function EditorialCardPage({ params }: { params: Promise<{ 
     .order("display_name");
 
   return (
-    <div className="mx-auto grid max-w-6xl gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-2">
+    // Tablet/desktop: ocupa exatamente a altura útil (janela − cabeçalho h-14 − padding py-6 do <main>),
+    // para os controles rolarem por conta própria e a prévia ficar sempre visível.
+    <div className="mx-auto flex max-w-7xl flex-col gap-4 md:h-[calc(100dvh-3.5rem-3rem)]">
+      <div className="flex shrink-0 flex-wrap items-end justify-between gap-2">
         <div>
           <Link href={`/w/${slug}/create`} className="text-sm text-muted-foreground hover:underline">
             ← Criar publicação
           </Link>
           <h1 className="text-2xl font-semibold tracking-tight">Card Editorial</h1>
-          <p className="text-sm text-muted-foreground">A prévia é desenhada pelo mesmo código que gera o arquivo final.</p>
+          <p className="text-sm text-muted-foreground max-md:hidden">A prévia é desenhada pelo mesmo código que gera o arquivo final.</p>
         </div>
       </div>
+      <div className="md:min-h-0 md:flex-1">
       <EditorialEditor
         slug={slug}
         workspaceId={workspace.id}
@@ -66,6 +69,7 @@ export default async function EditorialCardPage({ params }: { params: Promise<{ 
         }))}
         renderedUrl={renderedUrl}
       />
+      </div>
     </div>
   );
 }

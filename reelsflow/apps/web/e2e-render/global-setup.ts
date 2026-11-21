@@ -68,8 +68,24 @@ export default async function setup() {
     .flatMap((d) => readdirSync(d).filter((f) => f.endsWith(".css")).map((f) => readFileSync(path.join(d, f), "utf8")))
     .join("\n");
   writeFileSync(path.join(site, "app.css"), css);
+  // Mesma "casca" do app (sidebar, cabeçalho h-14, <main> py-6 e o contêiner da página do editor),
+  // para os testes de layout medirem o editor como na aplicação real.
   writeFileSync(
     path.join(site, "editor.html"),
-    `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/app.css"></head><body class="bg-background text-foreground antialiased"><main class="p-4 sm:p-6"><div id="root"></div></main><script type="module" src="/editor.js"></script></body></html>`,
+    `<!doctype html><html lang="pt-BR" class="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/app.css"></head>
+<body class="bg-background text-foreground antialiased">
+<div class="flex min-h-dvh">
+  <aside class="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r bg-sidebar lg:flex"><div class="flex h-14 items-center px-6 font-semibold">ReelsFlow</div></aside>
+  <div class="flex min-w-0 flex-1 flex-col">
+    <header class="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/85 px-4 backdrop-blur sm:px-6"><span class="text-sm">Workspace</span></header>
+    <main id="conteudo" class="flex-1 px-4 py-6 sm:px-6 lg:px-8">
+      <div class="mx-auto flex max-w-7xl flex-col gap-4 md:h-[calc(100dvh-3.5rem-3rem)]">
+        <div class="flex shrink-0 flex-wrap items-end justify-between gap-2"><div><a class="text-sm text-muted-foreground">← Criar publicação</a><h1 class="text-2xl font-semibold tracking-tight">Card Editorial</h1></div></div>
+        <div class="md:min-h-0 md:flex-1"><div id="root" class="md:h-full"></div></div>
+      </div>
+    </main>
+  </div>
+</div>
+<script type="module" src="/editor.js"></script></body></html>`,
   );
 }
