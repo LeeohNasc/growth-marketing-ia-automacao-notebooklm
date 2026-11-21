@@ -327,6 +327,9 @@ var InstagramConnector = class {
     }
   }
   async publish(input, io) {
+    if (input.media.mimeType.startsWith("image/")) {
+      throw new ConnectorError("permanent", "Imagem n\xE3o suportada: o conector direto do Instagram publica apenas Reels (v\xEDdeo). Use uma conta conectada via Zernio para imagens.", { code: "ig_image_unsupported" });
+    }
     const token = this.token(input);
     const igUser = input.account.externalAccountId;
     let containerId = typeof input.checkpoint?.container_id === "string" ? input.checkpoint.container_id : null;
@@ -466,6 +469,9 @@ var FacebookConnector = class {
     return this.graph.request("GET", videoId, { token, params: { fields: "status" } });
   }
   async publish(input, io) {
+    if (input.media.mimeType.startsWith("image/")) {
+      throw new ConnectorError("permanent", "Imagem n\xE3o suportada: o conector direto do Facebook publica apenas Reels (v\xEDdeo). Use uma conta conectada via Zernio para imagens.", { code: "fb_image_unsupported" });
+    }
     const token = this.token(input);
     const pageId = input.account.externalAccountId;
     let videoId = typeof input.checkpoint?.video_id === "string" ? input.checkpoint.video_id : null;
@@ -749,6 +755,10 @@ var ZernioConnector = class {
     const prev = input.checkpoint ?? {};
     let cp = { provider: "zernio", idempotency_key: key, ...prev };
     const platform = input.account.platform;
+    const isImage = input.media.mimeType.startsWith("image/");
+    if (isImage && platform !== "instagram" && platform !== "facebook") {
+      throw new ConnectorError("permanent", "Imagens s\xF3 s\xE3o publicadas no Instagram e no Facebook. Nada foi publicado.", { code: "zernio_image_platform" });
+    }
     let post;
     if (cp.zernio_post_id) {
       post = await this.call(() => this.client.getPost(cp.zernio_post_id), false);
@@ -761,8 +771,15 @@ var ZernioConnector = class {
         () => this.client.createPost(
           {
             content: input.caption || void 0,
-            mediaItems: [{ type: "video", url: input.media.url }],
-            platforms: [{ platform, accountId: input.account.externalAccountId, ...platform === "instagram" ? { platformSpecificData: { shareToFeed: true } } : {} }],
+            // Imagem (ex.: Card Editorial) vira post de feed; vídeo vira Reel (shareToFeed só vale para Reels).
+            mediaItems: [{ type: isImage ? "image" : "video", url: input.media.url }],
+            platforms: [
+              {
+                platform,
+                accountId: input.account.externalAccountId,
+                ...platform === "instagram" && !isImage ? { platformSpecificData: { shareToFeed: true } } : {}
+              }
+            ],
             profileId: input.account.providerProfileId ?? void 0,
             publishNow: true,
             externalId: key
@@ -1198,6 +1215,30 @@ var SPECS = {
     verticalRecommended: true
   }
 };
+var IMAGE_RULES_VERSION = "2026-11-21-image-v1";
+function evaluateImageCompatibility(img, sizeBytes) {
+  const r = img.width / img.height;
+  const ig = [];
+  if (img.format !== "jpeg") ig.push({ level: "error", code: "image_format", message: "O Instagram aceita apenas JPEG." });
+  if (r < 0.8 - 5e-3 || r > 1.91 + 5e-3) {
+    ig.push({ level: "error", code: "image_ratio", message: "Propor\xE7\xE3o fora de 4:5 a 1,91:1: n\xE3o \xE9 aceita no feed do Instagram (use 4:5 ou 1:1)." });
+  }
+  if (sizeBytes && sizeBytes > 8 * MB_) ig.push({ level: "error", code: "too_large", message: "Imagem acima de 8 MB." });
+  ig.push({ level: "warning", code: "feed_post", message: "Imagem: publicada no feed (n\xE3o como Reel), somente por contas conectadas via Zernio." });
+  const fb = [{ level: "warning", code: "feed_post", message: "Imagem: publicada como foto na P\xE1gina, somente via Zernio." }];
+  const no = (label) => ({ status: "error", verified: true, issues: [{ level: "error", code: "image_unsupported", message: `O ReelsFlow n\xE3o publica imagens no ${label}.` }] });
+  const st = (issues) => issues.some((i) => i.level === "error") ? "error" : issues.length ? "warning" : "ok";
+  return {
+    rulesVersion: IMAGE_RULES_VERSION,
+    kind: "image",
+    platforms: {
+      instagram_reels: { status: st(ig), verified: false, issues: ig },
+      facebook_reels: { status: st(fb), verified: false, issues: fb },
+      tiktok: no("TikTok"),
+      youtube_shorts: no("YouTube")
+    }
+  };
+}
 function containerOf(probe, ext) {
   if (probe.container.includes("webm") || probe.container.includes("matroska")) return "webm";
   if (probe.container.includes("mov") || probe.container.includes("mp4")) return ext === "mov" ? "mov" : "mp4";
@@ -1334,7 +1375,8 @@ var COMPAT_KEY = {
   youtube: "youtube_shorts",
   mock: null
 };
-function isCompatible(item, platform) {
+function isCompatible(item, platform, provider = "native") {
+  if (item.compatibility?.kind === "image" && platform !== "mock" && provider !== "zernio") return false;
   const key = COMPAT_KEY[platform];
   if (!key) return true;
   const status = item.compatibility?.platforms?.[key]?.status;
@@ -1364,7 +1406,7 @@ function buildPlan(input) {
           skipped.push({ mediaId: item.mediaId, name: item.name, targetId: t.targetId, reason: "no_slot" });
           continue;
         }
-        if (!isCompatible(item, t.platform)) {
+        if (!isCompatible(item, t.platform, t.provider)) {
           skipped.push({ mediaId: item.mediaId, name: item.name, targetId: t.targetId, reason: "incompatible" });
           continue;
         }
@@ -1389,7 +1431,7 @@ function buildPlan(input) {
       const mine = input.media.filter((m) => m.targetId === t.targetId);
       const usable = [];
       for (const m of mine) {
-        if (isCompatible(m, t.platform)) usable.push(m);
+        if (isCompatible(m, t.platform, t.provider)) usable.push(m);
         else skipped.push({ mediaId: m.mediaId, name: m.name, targetId: t.targetId, reason: "incompatible" });
       }
       const slots = generateSlots(rule, { notBefore: later(input.notBefore, input.notBeforeByTarget?.[t.targetId]), limit: usable.length });
@@ -1427,6 +1469,14 @@ function publicationBackoffSeconds(attempt, opts = {}) {
   const r = opts.random ?? Math.random;
   return Math.round(base * (0.8 + r() * 0.4));
 }
+
+// ../../packages/domain/src/editorial/layout.ts
+var CARD_FORMATS = {
+  feed: { width: 1080, height: 1350, label: "Feed 4:5 (1080\xD71350)" },
+  square: { width: 1080, height: 1080, label: "Quadrado 1:1 (1080\xD71080)" },
+  vertical: { width: 1080, height: 1920, label: "Vertical 9:16 (1080\xD71920)" }
+};
+var CARD_FORMAT_KEYS = Object.keys(CARD_FORMATS);
 
 // src/publishing/rules.ts
 var RULE_DEFAULTS = {
@@ -2114,7 +2164,7 @@ var handlePurge = async (job, { db, storage, log }) => {
 };
 
 // src/handlers/probe.ts
-import { mkdtemp, rm as rm2 } from "node:fs/promises";
+import { mkdtemp, readFile as readFile2, rm as rm2 } from "node:fs/promises";
 import path2 from "node:path";
 
 // src/ffmpeg.ts
@@ -2313,6 +2363,45 @@ async function httpRangeReader(url, fetchImpl = fetch) {
     }
   };
 }
+function bufferReader(buf) {
+  return { size: buf.byteLength, read: async (o, l) => buf.subarray(o, o + l) };
+}
+
+// src/media/image.ts
+var ImageProbeError = class extends Error {
+  constructor(code) {
+    super(code);
+    this.code = code;
+    this.name = "ImageProbeError";
+  }
+  code;
+};
+async function probeJpeg(reader) {
+  const head = await reader.read(0, Math.min(reader.size, 2));
+  if (head.length < 2 || head[0] !== 255 || head[1] !== 216) throw new ImageProbeError("not_jpeg");
+  let pos = 2;
+  const limit = Math.min(reader.size, 4 * 1024 * 1024);
+  while (pos + 4 <= limit) {
+    const m = await reader.read(pos, 4);
+    if (m[0] !== 255) throw new ImageProbeError("no_dimensions");
+    const marker = m[1];
+    if (marker === 216 || marker >= 208 && marker <= 215 || marker === 1 || marker === 255) {
+      pos += marker === 255 ? 1 : 2;
+      continue;
+    }
+    const len = m[2] << 8 | m[3];
+    if (marker >= 192 && marker <= 207 && marker !== 196 && marker !== 200 && marker !== 204) {
+      const sof = await reader.read(pos + 4, 5);
+      const height = sof[1] << 8 | sof[2];
+      const width = sof[3] << 8 | sof[4];
+      if (!width || !height) throw new ImageProbeError("no_dimensions");
+      return { format: "jpeg", width, height };
+    }
+    if (marker === 218 || marker === 217 || len < 2) break;
+    pos += 2 + len;
+  }
+  throw new ImageProbeError("no_dimensions");
+}
 
 // src/handlers/probe.ts
 var PROBE_FAILURE_REASONS = {
@@ -2323,7 +2412,7 @@ var PROBE_FAILURE_REASONS = {
 var handleProbe = async (job, deps, ctx) => {
   const { db, storage, log } = deps;
   const { rows } = await db.query(
-    "select id, workspace_id, uploaded_by, name, storage_path, size_bytes::float8 as size_bytes, status, deleted_at from public.media_assets where id = $1",
+    "select id, workspace_id, uploaded_by, name, storage_path, mime_type, size_bytes::float8 as size_bytes, status, deleted_at from public.media_assets where id = $1",
     [job.media_asset_id]
   );
   const media = rows[0];
@@ -2335,6 +2424,7 @@ var handleProbe = async (job, deps, ctx) => {
     await db.query("update public.media_assets set status = 'processing' where id = $1", [media.id]);
   }
   const remote = deps.probeMode === "remote";
+  if (media.mime_type.startsWith("image/")) return probeImage(deps, media, remote, ctx, job.id);
   const dir = remote ? null : await mkdtemp(path2.join(deps.tmpDir, "rf-probe-"));
   try {
     const ext = path2.extname(media.storage_path).slice(1);
@@ -2397,6 +2487,46 @@ var handleProbe = async (job, deps, ctx) => {
     if (dir) await rm2(dir, { recursive: true, force: true });
   }
 };
+async function probeImage(deps, media, remote, ctx, jobId) {
+  const { db, storage, log } = deps;
+  let dir = null;
+  try {
+    let img;
+    try {
+      if (remote) {
+        const url = await storage.signedUrl(media.storage_path, 600);
+        if (!url) throw new Error("URL tempor\xE1ria da imagem indispon\xEDvel");
+        img = await probeJpeg(await httpRangeReader(url, deps.fetchImpl));
+      } else {
+        dir = await mkdtemp(path2.join(deps.tmpDir, "rf-probe-"));
+        const local = path2.join(dir, "original.jpg");
+        await storage.download(media.storage_path, local);
+        img = await probeJpeg(bufferReader(new Uint8Array(await readFile2(local))));
+      }
+    } catch (err) {
+      if (!(err instanceof ImageProbeError)) throw err;
+      await markFailed(deps, media, "invalid_image");
+      log.warn("probe invalid image", { job_id: jobId, media_id: media.id, reason: err.code });
+      return;
+    }
+    const compat = evaluateImageCompatibility(img, Number(media.size_bytes));
+    await db.query(
+      `update public.media_assets
+          set status = 'ready', failure_reason = null, duration_ms = null, width = $2, height = $3, rotation = 0, fps = null,
+              video_codec = null, audio_codec = null, has_audio = false, bitrate = null, container = 'jpeg',
+              thumbnail_path = $4, compatibility = $5, probed_at = now()
+        where id = $1 and status = 'processing'`,
+      [media.id, img.width, img.height, media.storage_path, JSON.stringify(compat)]
+    );
+    await notifyBatchCompleted(deps, media);
+    log.info("probe done (image)", { job_id: jobId, media_id: media.id, width: img.width, height: img.height });
+  } catch (err) {
+    if (ctx.isFinalAttempt) await markFailed(deps, media, "processing_error");
+    throw err;
+  } finally {
+    if (dir) await rm2(dir, { recursive: true, force: true });
+  }
+}
 async function markFailed(deps, media, reason) {
   await deps.db.query(
     "update public.media_assets set status = 'failed', failure_reason = $2 where id = $1 and status in ('uploaded', 'processing')",
