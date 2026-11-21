@@ -119,3 +119,27 @@ export const FAQ = [
   { q: "O ReelsFlow cria vídeos automaticamente?", a: "Esta prévia demonstra o fluxo a partir de vídeos que você já tem." },
   { q: "Como funcionam cobrança e cancelamento?", a: "As condições comerciais serão apresentadas quando houver um fluxo de assinatura disponível." },
 ] as const;
+
+/** Status exibidos ao lado de recursos e redes (verificados em 21/11/2026). `null` = disponível no produto. */
+export type AvailabilityStatus = "Em homologação" | "Em teste" | "Planejado" | null;
+
+/** Funcionalidades — textos da arte "Do vídeo à publicação, em um só lugar". */
+export const FEATURES: { title: string; text: string; status: AvailabilityStatus; slot: "lt" | "lb" | "rt" | "rb" | "bottom" }[] = [
+  { title: "Biblioteca de vídeos", text: "Organize seus arquivos.", status: null, slot: "lt" },
+  { title: "Card Editorial", text: "Prepare seus vídeos.", status: "Em homologação", slot: "lb" },
+  { title: "Calendário de conteúdo", text: "Planeje a semana.", status: null, slot: "rt" },
+  { title: "Agendamento", text: "Defina os horários.", status: null, slot: "rb" },
+  { title: "Histórico de publicações", text: "Acompanhe cada status.", status: null, slot: "bottom" },
+];
+
+/**
+ * Integrações — a arte "Suas redes, um só painel" só é usada quando todas estiverem disponíveis.
+ * Instagram/Facebook: conector pronto, sem publicação real validada e App Review da Meta pendente.
+ * TikTok/YouTube: publicação direta bloqueada até auditoria/verificação das plataformas.
+ */
+export const INTEGRATIONS: { name: string; icon: string; status: AvailabilityStatus; w: number; h: number }[] = [
+  { name: "Instagram", icon: "/landing/rede-instagram.webp", status: "Em teste", w: 124, h: 124 },
+  { name: "Facebook", icon: "/landing/rede-facebook.webp", status: "Em teste", w: 124, h: 124 },
+  { name: "TikTok", icon: "/landing/rede-tiktok.webp", status: "Planejado", w: 124, h: 124 },
+  { name: "YouTube", icon: "/landing/rede-youtube.webp", status: "Planejado", w: 148, h: 116 },
+];

@@ -32,7 +32,7 @@ test("estrutura, SEO e um único H1", async ({ page }) => {
   await expect(page.getByRole("contentinfo")).toBeVisible();
   // ordem das seções
   const ids = await page.evaluate(() => [...document.querySelectorAll("main section[id], main [id='demonstracao']")].map((e) => e.id));
-  expect(ids).toEqual(["demonstracao", "como", "publico", "calculadora", "exemplo", "avaliacoes", "planos", "faq"]);
+  expect(ids).toEqual(["demonstracao", "como", "funcionalidades", "integracoes", "publico", "calculadora", "exemplo", "avaliacoes", "planos", "faq"]);
   // páginas de login seguem existindo e não são afetadas
   const login = await page.request.get("/login");
   expect(login.status()).toBe(200);
@@ -263,3 +263,48 @@ test("capturas desktop (1440) e celular (390)", async ({ page }) => {
   await page.screenshot({ path: path.join(SHOTS, "landing-390-hero.png") });
   await page.screenshot({ path: path.join(SHOTS, "landing-390-full.png"), fullPage: true });
 });
+
+test("funcionalidades e integrações: um H2 cada, textos acessíveis e status corretos", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const func = page.locator("#funcionalidades");
+  await expect(func.locator("h2")).toHaveCount(1);
+  await expect(func.locator("h2")).toHaveText("Do vídeo à publicação, em um só lugar");
+  await expect(func.locator("li h3")).toHaveText([/^Biblioteca de vídeos$/, /^Card Editorial\s*Em homologação$/, /^Calendário de conteúdo$/, /^Agendamento$/, /^Histórico de publicações$/]);
+  await expect(func.getByRole("link", { name: "Explorar demonstração" })).toHaveAttribute("href", "#demonstracao");
+  // composição desktop: os 5 blocos visíveis ao redor do monograma, sem sobrepor o centro
+  const hub = (await func.locator("[class*=featuresHub]").boundingBox())!;
+  for (const li of await func.locator("li").all()) {
+    await expect(li).toBeVisible();
+    const b = (await li.boundingBox())!;
+    const overlaps = b.x < hub.x + hub.width && b.x + b.width > hub.x && b.y < hub.y + hub.height && b.y + b.height > hub.y;
+    expect(overlaps).toBe(false);
+  }
+
+  const integ = page.locator("#integracoes");
+  await expect(integ.locator("h2")).toHaveCount(1);
+  await expect(integ.locator("h2")).toHaveText("Suas redes, um só painel");
+  await expect(integ.getByRole("listitem")).toHaveText([/Instagram\s*Em teste/, /Facebook\s*Em teste/, /TikTok\s*Planejado/, /YouTube\s*Planejado/]);
+  for (const img of await integ.locator("img").all()) {
+    await expect(img).toHaveAttribute("loading", "lazy");
+    await expect(img).toHaveAttribute("alt", "");
+    expect(Number(await img.getAttribute("width"))).toBeGreaterThan(0);
+    expect(Number(await img.getAttribute("height"))).toBeGreaterThan(0);
+  }
+  // nenhuma arte com status enganoso: as imagens completas não são usadas enquanto houver item em teste/planejado
+  await expect(page.locator('img[src*="arte-"]')).toHaveCount(0);
+});
+
+for (const w of [320, 390]) {
+  test(`funcionalidades/integrações no celular ${w}px: lista e grade legíveis`, async ({ page }) => {
+    await page.setViewportSize({ width: w, height: 800 });
+    await page.goto("/");
+    await page.locator("#integracoes").scrollIntoViewIfNeeded();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    const fs = await page.locator("#funcionalidades li h3").first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    expect(fs).toBeGreaterThanOrEqual(16);
+    const cards = await page.locator("#integracoes li").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().width));
+    expect(Math.min(...cards)).toBeGreaterThan(120);
+    await expect(page.locator("#integracoes svg[class*=connectors]")).toBeHidden();
+  });
+}

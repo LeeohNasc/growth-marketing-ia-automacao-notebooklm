@@ -30,6 +30,15 @@ export function BrandLockup({ className }: { className?: string }) {
   );
 }
 
+/** Só o nome "ReelsFlow" em contornos (recorte da assinatura; cor = currentColor). */
+export function BrandWordmark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="370 78 990 160" className={cn("h-6 w-auto shrink-0", className)} aria-hidden focusable="false">
+      <path fill="currentColor" d={marks.lockup.wordmark} />
+    </svg>
+  );
+}
+
 /**
  * Link da marca. `variant="lockup"` (padrão) quando há espaço para o nome; `"mark"` em espaços
  * compactos ou ao lado de um "ReelsFlow" já escrito. Texto: #0B0B0C no claro, #F7F7F8 no escuro.

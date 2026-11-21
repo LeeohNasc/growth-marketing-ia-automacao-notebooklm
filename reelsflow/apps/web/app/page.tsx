@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Brand } from "./_landing/brand";
 import { TimeCalculator } from "./_landing/calculator";
-import { AUDIENCE, COMPARISON, FAQ, GLOSSARY, PLANS, TESTIMONIALS, USE_CASE_STEPS } from "./_landing/content";
+import { AUDIENCE, COMPARISON, FAQ, FEATURES, GLOSSARY, INTEGRATIONS, PLANS, TESTIMONIALS, USE_CASE_STEPS, type AvailabilityStatus } from "./_landing/content";
+import { BrandMark, BrandWordmark } from "@/components/logo";
 import { PanelDemo } from "./_landing/demo";
 import { LandingHeader } from "./_landing/header";
 import s from "./_landing/landing.module.css";
@@ -19,6 +20,15 @@ export const metadata: Metadata = {
   openGraph: { type: "website", locale: "pt_BR", siteName: "ReelsFlow", title: TITLE, description: DESCRIPTION },
   twitter: { card: "summary", title: TITLE, description: DESCRIPTION },
 };
+
+function Status({ value }: { value: AvailabilityStatus }) {
+  if (!value) return null;
+  return (
+    <span className={s.status} data-status={value === "Planejado" ? "planned" : "testing"}>
+      {value}
+    </span>
+  );
+}
 
 export default function LandingPage() {
   // CTAs de assinatura só aparecem com a cobrança (modo de teste) configurada no servidor.
@@ -94,6 +104,73 @@ export default function LandingPage() {
                 <p>Consulte a agenda e veja exemplos de publicações concluídas ou com falha na demonstração.</p>
               </li>
             </ol>
+          </div>
+        </section>
+
+        {/* Funcionalidades — composição em HTML (a arte final traz o Card Editorial sem o status "Em homologação") */}
+        <section id="funcionalidades" className={`${s.section} ${s.featuresSection}`} aria-labelledby="func-title">
+          <div className={s.container}>
+            <div className={s.featuresPanel}>
+              <h2 id="func-title" className={s.panelTitle}>
+                Do vídeo à publicação, em um só lugar
+              </h2>
+              <div className={s.featuresGrid}>
+                <div className={s.featuresHub} aria-hidden>
+                  <BrandMark className={s.hubMark} />
+                  <BrandWordmark className={s.hubWordmark} />
+                </div>
+                <ul className={s.featuresList}>
+                  {FEATURES.map((f) => (
+                    <li key={f.title} className={s.feature} data-slot={f.slot}>
+                      <h3>
+                        {f.title}
+                        {f.status && <> <Status value={f.status} /></>}
+                      </h3>
+                      <p>{f.text}</p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className={s.panelCta}>
+                <a href="#demonstracao" className={`${s.btn} ${s.btnPrimary}`}>
+                  Explorar demonstração
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Integrações — cards em HTML enquanto alguma rede estiver em teste ou planejada */}
+        <section id="integracoes" className={s.section} aria-labelledby="integ-title">
+          <div className={s.container}>
+            <div className={s.integrationsPanel}>
+              <h2 id="integ-title" className={s.panelTitle}>
+                Suas redes, <span className={s.underline}>um só painel</span>
+              </h2>
+              <div className={s.hubCard} aria-hidden>
+                <BrandMark className={s.hubCardMark} />
+                <BrandWordmark className={s.hubCardWordmark} />
+              </div>
+              <svg className={s.connectors} viewBox="0 0 1000 120" preserveAspectRatio="none" aria-hidden focusable="false">
+                {[125, 375, 625, 875].map((x) => (
+                  <path key={x} d={`M500 0 C500 60 ${x} 40 ${x} 120`} />
+                ))}
+              </svg>
+              <ul className={s.networks}>
+                {INTEGRATIONS.map((n) => (
+                  <li key={n.name} className={s.network}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={n.icon} alt="" width={n.w} height={n.h} loading="lazy" decoding="async" className={s.networkIcon} />
+                    <span className={s.networkName}>{n.name}</span>
+                    <Status value={n.status} />
+                  </li>
+                ))}
+              </ul>
+              <p className={s.statusNote}>
+                Em teste: conexão implementada, em validação com as plataformas. Planejado: depende de aprovação da rede. A disponibilidade para
+                assinantes é confirmada antes da abertura das vendas.
+              </p>
+            </div>
           </div>
         </section>
 
