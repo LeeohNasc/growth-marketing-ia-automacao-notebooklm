@@ -34,7 +34,33 @@ export type ZernioAccount = {
   displayName?: string;
   isActive?: boolean;
   profilePicture?: string;
+  /** Escopos concedidos na rede (ex.: instagram_business_manage_insights) e áreas pedidas na conexão. */
+  permissions?: string[];
+  scopeAreas?: string[];
 };
+
+/** Métricas de um post (GET /v1/metrics/posts). Valor ausente = null (a rede não informa). */
+export type ZernioPostMetrics = Partial<
+  Record<
+    | "views" | "reach" | "impressions" | "likes" | "comments" | "shares" | "saves" | "engagement" | "engagementRate"
+    | "follows" | "profileViews" | "averageWatchTime" | "totalWatchTime" | "skipRate" | "completionRate",
+    number | null
+  >
+>;
+export type ZernioPostMetricsRow = {
+  postId: string | null;
+  externalPostId: string | null;
+  accountId: string;
+  platform: string;
+  platformPostId: string | null;
+  platformPostUrl: string | null;
+  publishedAt: string | null;
+  lastSyncedAt: string | null;
+  syncStatus: string | null;
+  syncError: string | null;
+  metrics: ZernioPostMetrics;
+};
+export type ZernioMetricsPage = { data: ZernioPostMetricsRow[]; pagination?: { nextCursor: string | null; hasMore: boolean }; meta?: { missingIds?: string[] } };
 
 export type ZernioPostTarget = {
   platform: string;
@@ -229,6 +255,25 @@ export class ZernioClient {
   async accountsHealth(): Promise<{ accountId: string; canPost?: boolean; needsReconnect?: boolean; status?: string; tokenExpiresAt?: string | null }[]> {
     const r = await this.request<{ accounts?: { accountId: string; canPost?: boolean; needsReconnect?: boolean; status?: string; tokenExpiresAt?: string | null }[] }>("GET", "accounts/health");
     return r.accounts ?? [];
+  }
+
+  // ---------------------------------------------------------------- métricas
+
+  /**
+   * Métricas sincronizadas pela Zernio. Escopo: `postId` (até 100, separados por vírgula) OU `accountId`
+   * (lista do período, paginada). Exige a área `analytics` na conexão da conta.
+   */
+  async listPostMetrics(q: { postId?: string[]; accountId?: string; fromDate?: string; toDate?: string; cursor?: string; limit?: number }): Promise<ZernioMetricsPage> {
+    const query: Query = {
+      postId: q.postId?.length ? q.postId.slice(0, 100).join(",") : undefined,
+      accountId: q.accountId,
+      fromDate: q.fromDate,
+      toDate: q.toDate,
+      cursor: q.cursor,
+      limit: q.limit ? String(Math.min(100, q.limit)) : undefined,
+    };
+    const r = await this.request<ZernioMetricsPage>("GET", "metrics/posts", { query });
+    return { data: r?.data ?? [], pagination: r?.pagination, meta: r?.meta };
   }
 
   // ---------------------------------------------------------------- posts

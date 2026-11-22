@@ -223,6 +223,24 @@ export type Database = {
         id: string; job_id: string; workspace_id: string; social_account_id: string | null; platform: SocialPlatform; external_id: string | null;
         permalink: string | null; published_at: string; source: "api" | "reconciled" | "manual"; created_at: string;
       }>;
+      social_posts: ReadOnly<{
+        id: string; workspace_id: string; social_account_id: string; platform: SocialPlatform; provider: "zernio"; provider_post_id: string | null;
+        platform_post_id: string; permalink: string | null; published_at: string; origin: "reelsflow" | "external"; external_publication_id: string | null;
+        media_asset_id: string | null; provider_sync_status: string | null; provider_sync_error: string | null; provider_synced_at: string | null;
+        views: number | null; reach: number | null; impressions: number | null; likes: number | null; comments: number | null; shares: number | null;
+        saves: number | null; engagement: number | null; engagement_rate: number | null; follows: number | null; profile_views: number | null;
+        avg_watch_ms: number | null; total_watch_ms: number | null; skip_rate: number | null; completion_rate: number | null;
+        metrics_updated_at: string | null; created_at: string; updated_at: string;
+      }>;
+      social_post_metrics_daily: ReadOnly<{
+        social_post_id: string; workspace_id: string; day: string; captured_at: string; views: number | null; reach: number | null; likes: number | null;
+        comments: number | null; shares: number | null; saves: number | null; engagement: number | null; follows: number | null; profile_views: number | null;
+        total_watch_ms: number | null;
+      }>;
+      metrics_sync_state: ReadOnly<{
+        social_account_id: string; workspace_id: string; status: "pending" | "ok" | "needs_analytics_scope" | "rate_limited" | "error" | "not_supported";
+        last_run_at: string | null; last_success_at: string | null; next_run_at: string; last_error: string | null; posts_seen: number; updated_at: string;
+      }>;
       social_account_capabilities: ReadOnly<{ social_account_id: string; workspace_id: string; capability: string; granted: boolean; details: Json; checked_at: string }>;
       workspace_invitations: ReadOnly<{
         id: string; workspace_id: string; email: string; role: WorkspaceRole; invited_by: string | null; created_at: string;
