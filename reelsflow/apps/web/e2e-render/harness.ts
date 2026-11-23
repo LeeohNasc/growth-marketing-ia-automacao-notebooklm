@@ -7,6 +7,8 @@ import { layoutFor } from "../lib/editorial/draw";
 import { loadImageDrawable, renderCardImage, renderCardVideo, CardRenderError, type CardRenderInput } from "../lib/editorial/export";
 import { ensureCardFonts } from "../lib/editorial/fonts";
 import { renderPreview } from "../lib/editorial/preview";
+import { normalizeSplit } from "@reelsflow/domain";
+import { SplitRenderError, canMixAudio, probeSplitSource, renderSplitVideo } from "../lib/split/render";
 
 type Cfg = { content: CardContent; style?: Partial<CardStyle>; focal?: FocalPoint[]; avatar?: string | null; media?: (string | null)[]; logo?: string | null };
 type Rect = { x: number; y: number; w: number; h: number };
@@ -39,6 +41,26 @@ async function pixels(data: string, type: string) {
 const errInfo = (e: unknown) => (e instanceof CardRenderError ? { error: e.code, message: e.message } : { error: "unexpected", message: String(e) });
 
 const api = {
+  /** Tela Dividida: renderiza com o renderizador REAL e devolve o MP4 (base64) + resumo. */
+  async split(raw: unknown, topUrl: string, bottomUrl: string) {
+    try {
+      const [top, bottom] = await Promise.all([fetchBlob(topUrl), fetchBlob(bottomUrl)]);
+      const t0 = performance.now();
+      const r = await renderSplitVideo(normalizeSplit(raw), { top, bottom });
+      return { data: await b64(r.blob), thumb: r.thumbnail ? await b64(r.thumbnail) : null, durationS: r.durationS, hasAudio: r.hasAudio, audioPath: r.audioPath, ms: Math.round(performance.now() - t0) };
+    } catch (e) {
+      return e instanceof SplitRenderError ? { error: e.code, message: e.message } : { error: "unexpected", message: String(e) };
+    }
+  },
+  async splitProbe(url: string) {
+    try {
+      return await probeSplitSource(await fetchBlob(url));
+    } catch (e) {
+      return e instanceof SplitRenderError ? { error: e.code, message: e.message } : { error: "unexpected", message: String(e) };
+    }
+  },
+  canMixAudio: () => canMixAudio(),
+
   async layout(cfg: Cfg) {
     await ensureCardFonts();
     const ctx = new OffscreenCanvas(10, 10).getContext("2d")!;
