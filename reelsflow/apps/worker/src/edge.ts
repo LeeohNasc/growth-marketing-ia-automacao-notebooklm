@@ -13,6 +13,7 @@ import { createLogger } from "./log";
 import { PgCredentialProvider } from "./publishing/credentials";
 import { PgMockStore } from "./publishing/store";
 import { SupabaseStorage } from "./storage";
+import { ResendSender } from "./notify/email";
 import { tick, type WorkerOptions } from "./worker";
 
 export type EdgeEnv = {
@@ -25,6 +26,10 @@ export type EdgeEnv = {
   zernioApiKey?: string;
   /** Simulador de publicação ligado (padrão: sim, enquanto não houver app Meta aprovado). */
   simulatedAccounts?: boolean;
+  /** Avisos por e-mail via Resend: só ativos com chave E remetente verificado. */
+  resendApiKey?: string;
+  emailFrom?: string;
+  appUrl?: string;
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -76,12 +81,13 @@ export async function runEdgeTick(env: EdgeEnv, postgres: PostgresFactory, invoc
         ffmpeg: { ffprobe: "ffprobe", ffmpeg: "ffmpeg" },
         tmpDir: "/tmp",
         probeMode: "remote",
+        email: { sender: env.resendApiKey && env.emailFrom ? new ResendSender({ apiKey: env.resendApiKey, from: env.emailFrom }) : null, appUrl: env.appUrl ?? null },
       },
       opts,
       { lastMaintenance: 0 },
     );
     // Só a PRESENÇA da chave (booleano): o valor nunca vai para logs.
-    log.info("tick done", { processed, ms: Date.now() - started, zernio_configured: zernio !== null });
+    log.info("tick done", { processed, ms: Date.now() - started, zernio_configured: zernio !== null, email_configured: Boolean(env.resendApiKey && env.emailFrom) });
     return { processed, ms: Date.now() - started };
   } finally {
     await db.end();

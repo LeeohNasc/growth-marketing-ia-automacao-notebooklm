@@ -87,3 +87,21 @@ export function publicationBackoffSeconds(attempt: number, opts: { retryAfterSec
   const r = opts.random ?? Math.random;
   return Math.round(base * (0.8 + r() * 0.4));
 }
+
+/**
+ * Reconciliação de publicações "incertas" (o pedido pode ter chegado à plataforma, mas a resposta
+ * se perdeu). A Zernio e a Meta podem segurar um post por horas (fila/limites da rede), então
+ * mandar para revisão cedo demais leva o usuário a republicar à mão — e duplicar.
+ *  - consultas espaçadas: 30 s, 1, 2, 4, 8, 16, 32 min e depois a cada 1 h;
+ *  - revisão humana só depois de ~24 h sem confirmação (RECONCILE_MAX_ATTEMPTS consultas).
+ */
+export const RECONCILE_MAX_ATTEMPTS = 30;
+export function reconcileDelaySeconds(attemptsDone: number): number {
+  return Math.min(3600, 30 * 2 ** Math.max(0, attemptsDone));
+}
+/** Tempo total aproximado (s) até a revisão humana. */
+export function reconcileWindowSeconds(maxAttempts = RECONCILE_MAX_ATTEMPTS): number {
+  let s = 0;
+  for (let i = 0; i < maxAttempts - 1; i++) s += reconcileDelaySeconds(i + 1);
+  return s;
+}

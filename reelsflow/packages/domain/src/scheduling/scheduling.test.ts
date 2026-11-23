@@ -261,3 +261,14 @@ describe("máquina de estados", () => {
     expect(publicationBackoffSeconds(1, { retryAfterSeconds: 900 })).toBe(900);
   });
 });
+
+describe("reconciliação espaçada", () => {
+  it("consultas crescem até 1 h; revisão só depois de ~1 dia", async () => {
+    const { reconcileDelaySeconds, reconcileWindowSeconds, RECONCILE_MAX_ATTEMPTS } = await import("./job-state");
+    expect([0, 1, 2, 3, 6, 7, 20].map(reconcileDelaySeconds)).toEqual([30, 60, 120, 240, 1920, 3600, 3600]);
+    expect(RECONCILE_MAX_ATTEMPTS).toBe(30);
+    const w = reconcileWindowSeconds();
+    expect(w).toBeGreaterThan(20 * 3600);
+    expect(w).toBeLessThan(30 * 3600);
+  });
+});

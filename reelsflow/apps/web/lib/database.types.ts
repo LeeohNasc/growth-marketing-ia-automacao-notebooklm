@@ -160,6 +160,12 @@ export type Database = {
         Update: never;
         Relationships: [];
       };
+      notification_preferences: {
+        Row: { user_id: string; workspace_id: string; email_enabled: boolean; muted_types: string[]; updated_at: string };
+        Insert: { user_id: string; workspace_id: string; email_enabled?: boolean; muted_types?: string[] };
+        Update: { email_enabled?: boolean; muted_types?: string[] };
+        Relationships: [];
+      };
       notifications: {
         Row: {
           id: string;
@@ -169,6 +175,8 @@ export type Database = {
           payload: Json;
           read_at: string | null;
           email_status: string | null;
+          email_error?: string | null;
+          emailed_at?: string | null;
         } & Timestamps;
         Insert: never;
         Update: never;

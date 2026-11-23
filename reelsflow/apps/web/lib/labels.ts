@@ -19,7 +19,20 @@ export const NOTIFICATION_LABELS: Record<string, string> = {
   "account.token_expiring": "Autorização expirando",
   "queue.low": "Pouco conteúdo na fila",
   "plan.limit_reached": "Limite do plano atingido",
+  "system.worker_stalled": "Processamento de publicações interrompido (as vencidas aguardam)",
 };
+
+/** Avisos que também podem ir por e-mail (mesma lista do banco: app.email_worthy). */
+export const EMAIL_NOTIFICATION_TYPES = [
+  "publication.failed",
+  "publication.needs_review",
+  "publication.late",
+  "account.disconnected",
+  "account.token_expiring",
+  "system.worker_stalled",
+  "upload.failed",
+  "plan.limit_reached",
+] as const;
 
 export const REVIEW_REASONS: Record<string, string> = {
   late: "Passou do horário além da tolerância (ex.: sistema indisponível).",

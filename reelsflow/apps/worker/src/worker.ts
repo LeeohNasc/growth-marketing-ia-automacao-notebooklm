@@ -5,6 +5,7 @@ import type { CredentialProvider } from "./publishing/credentials";
 import { executePublication, reconcileUncertain } from "./publishing/execute";
 import { maintainInstagramTokens } from "./publishing/tokens";
 import { syncZernioAccounts } from "./publishing/zernio-accounts";
+import { deliverEmails, type EmailSender } from "./notify/email";
 import type { GraphClient, TokenCipher, ZernioClient } from "@reelsflow/connectors/server";
 import { claimPublications, promoteDue, reapPublicationLeases } from "./publishing/scheduler";
 import { handlePurge } from "./handlers/purge";
@@ -49,6 +50,8 @@ export type WorkerDeps = HandlerDeps & {
   instagramTokens?: { cipher: TokenCipher | null; graph: GraphClient };
   /** Cliente da Zernio (presente quando ZERNIO_API_KEY está configurada). */
   zernio?: ZernioClient | null;
+  /** Avisos por e-mail. Sem provedor (null), os avisos ficam só no sistema. undefined = etapa desligada. */
+  email?: { sender: EmailSender | null; appUrl?: string | null };
 };
 
 /**
@@ -83,6 +86,13 @@ export async function tick(deps: WorkerDeps, opts: WorkerOptions, state: { lastM
         await maintainInstagramTokens(deps.db, { ...deps.instagramTokens, log: deps.log });
       } catch (e) {
         deps.log.error("instagram token maintenance failed", { error: String(e) });
+      }
+    }
+    if (deps.email) {
+      try {
+        await deliverEmails(deps.db, { sender: deps.email.sender, appUrl: deps.email.appUrl, log: deps.log });
+      } catch (e) {
+        deps.log.error("email delivery step failed", { error: String(e) });
       }
     }
     await deps.db.query(

@@ -894,7 +894,7 @@ function classifyZernioError(e, sideEffect) {
     return new ConnectorError("permanent", "Este v\xEDdeo com a mesma legenda j\xE1 foi enviado a esta conta nas \xFAltimas 24 h. Nada foi publicado de novo.", opts);
   }
   if (e.status === 401) return new ConnectorError("transient", "Chave da Zernio inv\xE1lida ou ausente no servidor.", { ...opts, code: "zernio_api_key", retryAfterSeconds: 900 });
-  if (e.status === 402) return new ConnectorError("transient", "A Zernio exige pagamento para esta opera\xE7\xE3o (limite do plano).", { ...opts, retryAfterSeconds: 3600 });
+  if (e.status === 402) return new ConnectorError("transient", "A Zernio exige pagamento para esta opera\xE7\xE3o (limite do plano).", { ...opts, code: "zernio_payment_required", retryAfterSeconds: 3600 });
   if (e.status === 403 && /DISCONNECTED|disconnected/.test(`${e.code} ${e.message}`)) return new ConnectorError("auth", "Conta desconectada na Zernio. Reconecte a conta.", opts);
   if (e.status === 404) return new ConnectorError("auth", "Conta ou post n\xE3o encontrado na Zernio.", opts);
   return new ConnectorError("permanent", e.message, opts);
@@ -1054,6 +1054,136 @@ var SupabaseStorage = class {
     return (data ?? []).some((o) => o.name === name);
   }
 };
+
+// src/notify/email.ts
+var EmailSendError = class extends Error {
+  constructor(message, permanent) {
+    super(message);
+    this.permanent = permanent;
+  }
+  permanent;
+};
+var ResendSender = class {
+  constructor(cfg) {
+    this.cfg = cfg;
+  }
+  cfg;
+  name = "resend";
+  async send(msg) {
+    const res = await (this.cfg.fetchImpl ?? fetch)("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { authorization: `Bearer ${this.cfg.apiKey}`, "content-type": "application/json" },
+      body: JSON.stringify({ from: this.cfg.from, to: [msg.to], subject: msg.subject, text: msg.text })
+    });
+    if (!res.ok) {
+      const permanent = res.status >= 400 && res.status < 500 && res.status !== 429;
+      throw new EmailSendError(`HTTP ${res.status}`, permanent);
+    }
+  }
+};
+var SUBJECTS = {
+  "publication.failed": "Uma publica\xE7\xE3o falhou",
+  "publication.needs_review": "Uma publica\xE7\xE3o precisa da sua revis\xE3o",
+  "publication.late": "Uma publica\xE7\xE3o atrasou e foi para revis\xE3o",
+  "account.disconnected": "Uma conta precisa ser reconectada",
+  "account.token_expiring": "A autoriza\xE7\xE3o de uma conta vai expirar",
+  "system.worker_stalled": "Publica\xE7\xF5es em espera: processamento interrompido",
+  "upload.failed": "Um v\xEDdeo enviado n\xE3o p\xF4de ser processado",
+  "plan.limit_reached": "Limite do plano atingido"
+};
+var ACTION = {
+  "publication.failed": "Veja o motivo na Fila de Publica\xE7\xF5es e, se quiser, reagende.",
+  "publication.needs_review": "Abra a Fila de Publica\xE7\xF5es para decidir o que fazer.",
+  "publication.late": "Abra a Fila de Publica\xE7\xF5es para reagendar ou descartar.",
+  "account.disconnected": "Abra Contas Conectadas e reconecte a conta. As publica\xE7\xF5es dela aguardam.",
+  "account.token_expiring": "Abra Contas Conectadas e renove a autoriza\xE7\xE3o.",
+  "system.worker_stalled": "Nossa equipe j\xE1 foi alertada. As publica\xE7\xF5es vencidas aguardam e nada \xE9 publicado em rajada.",
+  "upload.failed": "Abra a Biblioteca para ver o motivo e enviar outro arquivo.",
+  "plan.limit_reached": "Abra Assinatura para ver o uso e os planos."
+};
+function composeEmail(p, appUrl) {
+  const subject = `[ReelsFlow] ${SUBJECTS[p.type] ?? "Novo aviso"}`;
+  const pick = (k) => typeof p.payload[k] === "string" ? String(p.payload[k]).slice(0, 120) : null;
+  const lines = [`Workspace: ${p.workspace}`];
+  if (pick("account")) lines.push(`Conta: ${pick("account")}`);
+  if (pick("campaign")) lines.push(`Campanha: ${pick("campaign")}`);
+  if (pick("media")) lines.push(`V\xEDdeo: ${pick("media")}`);
+  lines.push("", ACTION[p.type] ?? "Abra o ReelsFlow para ver os detalhes.");
+  if (appUrl) lines.push("", `${appUrl.replace(/\/$/, "")}/w/${p.slug}/notifications`);
+  lines.push("", "Voc\xEA recebe este e-mail porque \xE9 membro do workspace. Ajuste em Notifica\xE7\xF5es \u2192 Prefer\xEAncias.");
+  return { subject, text: lines.join("\n") };
+}
+async function deliverEmails(db, deps) {
+  const out = { sent: 0, skipped: 0, failed: 0 };
+  const { rows } = await db.query(
+    `select n.id, n.workspace_id, n.user_id, n.type, n.payload, n.email_attempts, u.email, w.name as workspace, w.slug,
+            p.email_enabled, p.muted_types
+       from public.notifications n
+       join auth.users u on u.id = n.user_id
+       join public.workspaces w on w.id = n.workspace_id
+       left join public.notification_preferences p on p.user_id = n.user_id and p.workspace_id = n.workspace_id
+      where n.email_status = 'pending' and n.created_at > now() - interval '24 hours'
+      order by n.created_at limit $1`,
+    [deps.batch ?? 20]
+  );
+  if (!rows.length) return out;
+  const mark = (id, status, error) => db.query(
+    `update public.notifications set email_status = $2, email_error = $3, email_attempts = email_attempts + case when $2 in ('sent', 'failed', 'pending') then 1 else 0 end,
+              emailed_at = case when $2 = 'sent' then now() else emailed_at end
+        where id = $1 and email_status = 'pending'`,
+    [id, status, error]
+  );
+  const sentToday = Number((await db.query("select count(*) as n from public.notifications where emailed_at > now() - interval '24 hours'")).rows[0]?.n ?? 0);
+  let budget = (deps.dailyCap ?? 90) - sentToday;
+  for (const n of rows) {
+    if (!deps.sender) {
+      await mark(n.id, "skipped", "provider_not_configured");
+      out.skipped++;
+      continue;
+    }
+    if (!n.email) {
+      await mark(n.id, "skipped", "no_email");
+      out.skipped++;
+      continue;
+    }
+    if (n.email_enabled === false || (n.muted_types ?? []).includes(n.type)) {
+      await mark(n.id, "skipped", "user_preference");
+      out.skipped++;
+      continue;
+    }
+    const subjectKey = String(n.payload.account_id ?? n.payload.job_id ?? n.payload.campaign ?? "");
+    const recent = await db.query(
+      `select count(*) as total,
+              count(*) filter (where type = $2 and coalesce(payload ->> 'account_id', payload ->> 'job_id', payload ->> 'campaign', '') = $3) as same
+         from public.notifications where user_id = $1 and emailed_at > now() - interval '1 hour'`,
+      [n.user_id, n.type, subjectKey]
+    );
+    if (Number(recent.rows[0]?.same ?? 0) > 0) {
+      await mark(n.id, "skipped", "duplicate_recent");
+      out.skipped++;
+      continue;
+    }
+    if (Number(recent.rows[0]?.total ?? 0) >= (deps.perUserPerHour ?? 10) || budget <= 0) {
+      await mark(n.id, "skipped", budget <= 0 ? "daily_cap" : "user_rate_limit");
+      out.skipped++;
+      continue;
+    }
+    try {
+      await deps.sender.send({ to: n.email, ...composeEmail(n, deps.appUrl ?? null) });
+      await mark(n.id, "sent", null);
+      budget--;
+      out.sent++;
+    } catch (e) {
+      const permanent = e instanceof EmailSendError ? e.permanent : false;
+      const giveUp = permanent || n.email_attempts + 1 >= 3;
+      await mark(n.id, giveUp ? "failed" : "pending", (e instanceof Error ? e.message : String(e)).slice(0, 300));
+      if (giveUp) out.failed++;
+      deps.log.warn("email delivery failed", { notification_id: n.id, provider: deps.sender.name, permanent, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  if (out.sent || out.failed) deps.log.info("emails delivered", out);
+  return out;
+}
 
 // ../../packages/domain/src/validators.ts
 import { z } from "npm:zod@4.6.7";
@@ -1469,6 +1599,10 @@ function publicationBackoffSeconds(attempt, opts = {}) {
   const r = opts.random ?? Math.random;
   return Math.round(base * (0.8 + r() * 0.4));
 }
+var RECONCILE_MAX_ATTEMPTS = 30;
+function reconcileDelaySeconds(attemptsDone) {
+  return Math.min(3600, 30 * 2 ** Math.max(0, attemptsDone));
+}
 
 // ../../packages/domain/src/editorial/layout.ts
 var CARD_FORMATS = {
@@ -1661,7 +1795,12 @@ async function completeCampaigns(db, now = /* @__PURE__ */ new Date()) {
 // src/publishing/execute.ts
 var LeaseLost = class extends Error {
 };
-var NO_ATTEMPT_WAIT_CODES = /* @__PURE__ */ new Set(["ig_processing", "zernio_processing", "zernio_not_configured", "zernio_api_key"]);
+var NO_ATTEMPT_WAIT_CODES = /* @__PURE__ */ new Set(["ig_processing", "zernio_processing", "zernio_not_configured", "zernio_api_key", "zernio_payment_required"]);
+var SERVER_CONFIG_CODES = {
+  zernio_not_configured: "A chave da Zernio n\xE3o est\xE1 configurada no worker; publica\xE7\xF5es via Zernio est\xE3o em espera.",
+  zernio_api_key: "A Zernio recusou a chave do servidor (inv\xE1lida ou revogada); publica\xE7\xF5es via Zernio est\xE3o em espera.",
+  zernio_payment_required: "A Zernio exige pagamento/upgrade do plano; publica\xE7\xF5es via Zernio est\xE3o em espera."
+};
 var ZERNIO_MEDIA_URL_TTL = 24 * 3600;
 var accountInput = (a) => ({
   id: a.id,
@@ -1785,6 +1924,9 @@ async function executeInner(claimed, deps) {
     );
     await markPublished(db, claimed, ctx, result.externalId, result.permalink, "api", workerId);
     await finishAttempt(db, attemptId, { outcome: "published", phase, checkpoint });
+    if (ctx.account.provider === "zernio") {
+      await db.query("select app.resolve_ops_alert(k) from unnest($1::text[]) k", [Object.keys(SERVER_CONFIG_CODES)]);
+    }
     log.info("published", { job_id: claimed.id, attempt: claimed.attempt_count });
     return "published";
   } catch (raw) {
@@ -1855,6 +1997,14 @@ async function handleFailure(claimed, ctx, err, a, deps) {
   }
   if (err.code && NO_ATTEMPT_WAIT_CODES.has(err.code)) {
     const delay = Math.max(30, err.retryAfterSeconds ?? 60);
+    if (SERVER_CONFIG_CODES[err.code]) {
+      await db.query("select app.raise_ops_alert($1, 'critical', null, $2, $3::jsonb, $1)", [
+        err.code,
+        SERVER_CONFIG_CODES[err.code],
+        JSON.stringify({ last_job_id: claimed.id, provider_message: err.message.slice(0, 200) })
+      ]);
+      log.error("server configuration problem; publication waiting", { job_id: claimed.id, code: err.code });
+    }
     await transition(db, claimed.id, workerId, `status = 'failed_retryable', next_attempt_at = now() + make_interval(secs => $5), attempt_count = greatest(attempt_count - 1, 0), ${clear}`, [...base, delay]);
     await finishAttempt(db, a.attemptId, { outcome: "retry", phase: a.phase, err, checkpoint: a.checkpoint });
     log.info("publication waiting for remote processing", { job_id: claimed.id, delay_s: delay });
@@ -1883,6 +2033,7 @@ async function reconcileUncertain(deps, limit = 20, minAgeSeconds = 30) {
       where j.id in (
         select id from public.publication_jobs
          where status = 'uncertain' and updated_at < now() - make_interval(secs => $2)
+           and (reconcile_attempts = 0 or next_attempt_at <= now())
            and (lease_expires_at is null or lease_expires_at < now())
          order by updated_at limit $1 for update skip locked)
      returning j.id, j.workspace_id, j.external_checkpoint, j.reconcile_attempts`,
@@ -1895,7 +2046,8 @@ async function reconcileUncertain(deps, limit = 20, minAgeSeconds = 30) {
       "insert into public.publication_attempts (job_id, workspace_id, attempt_no, worker_id, kind) values ($1, $2, $3, $4, 'reconcile') returning id::text",
       [j.id, j.workspace_id, attemptNo, workerId]
     );
-    const release = "lease_owner = null, lease_expires_at = null, reconcile_attempts = $3";
+    const unlock = "lease_owner = null, lease_expires_at = null, reconcile_attempts = $3";
+    const release = `${unlock}, next_attempt_at = now() + make_interval(secs => ${reconcileDelaySeconds(attemptNo)})`;
     let state;
     try {
       const status = j.external_checkpoint ? await deps.connectors.forAccount(ctx.account).getStatus(
@@ -1909,11 +2061,11 @@ async function reconcileUncertain(deps, limit = 20, minAgeSeconds = 30) {
         await markPublished(db, { id: j.id, workspace_id: j.workspace_id }, ctx, status.externalId, status.permalink, "reconciled", workerId);
       } else if (status.state === "not_found") {
         await db.query(
-          `update public.publication_jobs set status = 'failed_retryable', next_attempt_at = now(), external_checkpoint = null, ${release}
+          `update public.publication_jobs set status = 'failed_retryable', external_checkpoint = null, ${unlock}, next_attempt_at = now()
             where id = $1 and lease_owner = $2`,
           [j.id, workerId, attemptNo]
         );
-      } else if (attemptNo >= 5) {
+      } else if (attemptNo >= RECONCILE_MAX_ATTEMPTS) {
         await db.query(
           `update public.publication_jobs set status = 'needs_review', review_reason = 'uncertain_unresolved', ${release}
             where id = $1 and lease_owner = $2`,
@@ -1922,6 +2074,7 @@ async function reconcileUncertain(deps, limit = 20, minAgeSeconds = 30) {
         await notify(db, j.workspace_id, [ctx.campaign?.created_by], "publication.needs_review", { job_id: j.id, reason: "uncertain_unresolved" });
       } else {
         await db.query(`update public.publication_jobs set ${release} where id = $1 and lease_owner = $2`, [j.id, workerId, attemptNo]);
+        log.info("publication still unconfirmed", { job_id: j.id, check: attemptNo, remote_state: state, next_check_s: reconcileDelaySeconds(attemptNo) });
       }
     } catch (e) {
       state = "error";
@@ -2701,6 +2854,13 @@ async function tick(deps, opts, state) {
         deps.log.error("instagram token maintenance failed", { error: String(e) });
       }
     }
+    if (deps.email) {
+      try {
+        await deliverEmails(deps.db, { sender: deps.email.sender, appUrl: deps.email.appUrl, log: deps.log });
+      } catch (e) {
+        deps.log.error("email delivery step failed", { error: String(e) });
+      }
+    }
     await deps.db.query(
       `insert into public.worker_heartbeats (worker_id, kind, last_seen_at) values ($1, 'worker', now())
        on conflict (worker_id) do update set last_seen_at = now()`,
@@ -2769,12 +2929,13 @@ async function runEdgeTick(env, postgres, invocationId) {
         mediaUrl: (p, ttl) => storage.signedUrl(p, ttl ?? 2 * 3600),
         ffmpeg: { ffprobe: "ffprobe", ffmpeg: "ffmpeg" },
         tmpDir: "/tmp",
-        probeMode: "remote"
+        probeMode: "remote",
+        email: { sender: env.resendApiKey && env.emailFrom ? new ResendSender({ apiKey: env.resendApiKey, from: env.emailFrom }) : null, appUrl: env.appUrl ?? null }
       },
       opts,
       { lastMaintenance: 0 }
     );
-    log.info("tick done", { processed, ms: Date.now() - started, zernio_configured: zernio !== null });
+    log.info("tick done", { processed, ms: Date.now() - started, zernio_configured: zernio !== null, email_configured: Boolean(env.resendApiKey && env.emailFrom) });
     return { processed, ms: Date.now() - started };
   } finally {
     await db.end();

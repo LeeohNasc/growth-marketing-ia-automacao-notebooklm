@@ -204,14 +204,29 @@ describe("publicação com conector simulado", () => {
     expect(ext[0]!.source).toBe("reconciled");
   });
 
-  it("resultado nunca confirmado: após 5 consultas vai para revisão humana", async () => {
+  it("resultado nunca confirmado: consultas espaçadas; revisão humana só após ~1 dia (30 consultas), sem republicar", async () => {
     const acc = await account("uncertain");
     const id = await job({ account: acc });
     await tick(deps, { ...opts(), reconcileMinAgeSeconds: 3600 }, { lastMaintenance: Date.now() });
     expect((await jobRow(id)).status).toBe("uncertain");
-    for (let i = 0; i < 5; i++) await reconcileUncertain({ db, connectors, log: silentLogger, workerId: "r" }, 20, 0);
-    expect(await jobRow(id)).toMatchObject({ status: "needs_review", review_reason: "uncertain_unresolved", reconcile_attempts: 5 });
-    expect(await remotePosts(acc)).toBe(1);
+    const rec = () => reconcileUncertain({ db, connectors, log: silentLogger, workerId: "r" }, 20, 0);
+    await rec();
+    // a próxima consulta foi espaçada: rodar de novo agora NÃO consulta a plataforma
+    const after1 = await jobRow(id);
+    expect(after1.reconcile_attempts).toBe(1);
+    expect(new Date(after1.next_attempt_at).getTime() - Date.now()).toBeGreaterThan(50_000);
+    await rec();
+    expect((await jobRow(id)).reconcile_attempts).toBe(1);
+    // simula o passar do tempo até a 29ª consulta: continua incerto (não vai para revisão cedo)
+    for (let i = 2; i <= 29; i++) {
+      await db.query("update public.publication_jobs set next_attempt_at = now() - interval '1 second' where id = $1", [id]);
+      await rec();
+    }
+    expect(await jobRow(id)).toMatchObject({ status: "uncertain", reconcile_attempts: 29 });
+    await db.query("update public.publication_jobs set next_attempt_at = now() - interval '1 second' where id = $1", [id]);
+    await rec();
+    expect(await jobRow(id)).toMatchObject({ status: "needs_review", review_reason: "uncertain_unresolved", reconcile_attempts: 30 });
+    expect(await remotePosts(acc)).toBe(1); // nunca republicou
   });
 
   it("token revogado: conta sem autorização, publicações da conta aguardam, admins avisados", async () => {

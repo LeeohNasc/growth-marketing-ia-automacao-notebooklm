@@ -1,6 +1,6 @@
 import type { Db } from "../db";
 import { ConnectorError, toConnectorError, type ConnectorRegistry, type Phase, type PublishConnector } from "@reelsflow/connectors";
-import { composeCaption, publicationBackoffSeconds, resolveContent } from "@reelsflow/domain";
+import { RECONCILE_MAX_ATTEMPTS, composeCaption, publicationBackoffSeconds, reconcileDelaySeconds, resolveContent } from "@reelsflow/domain";
 import type { Logger } from "../log";
 import type { CredentialProvider } from "./credentials";
 import type { ClaimedPublication } from "./scheduler";
@@ -23,7 +23,13 @@ class LeaseLost extends Error {}
  * Esperas que NÃO gastam tentativa: a plataforma ainda processa (o conector impõe o prazo total) ou
  * falta configuração do servidor (chave da Zernio ausente/inválida) — nada a ver com a publicação.
  */
-const NO_ATTEMPT_WAIT_CODES = new Set(["ig_processing", "zernio_processing", "zernio_not_configured", "zernio_api_key"]);
+const NO_ATTEMPT_WAIT_CODES = new Set(["ig_processing", "zernio_processing", "zernio_not_configured", "zernio_api_key", "zernio_payment_required"]);
+/** Problemas de CONFIGURAÇÃO do servidor (não da conta do cliente): viram alerta operacional. */
+const SERVER_CONFIG_CODES: Record<string, string> = {
+  zernio_not_configured: "A chave da Zernio não está configurada no worker; publicações via Zernio estão em espera.",
+  zernio_api_key: "A Zernio recusou a chave do servidor (inválida ou revogada); publicações via Zernio estão em espera.",
+  zernio_payment_required: "A Zernio exige pagamento/upgrade do plano; publicações via Zernio estão em espera.",
+};
 /** Validade da URL do vídeo: a Zernio pode segurar o post (limites da rede) antes de baixar o arquivo. */
 const ZERNIO_MEDIA_URL_TTL = 24 * 3600;
 
@@ -189,6 +195,10 @@ async function executeInner(claimed: ClaimedPublication, deps: PublishDeps): Pro
     );
     await markPublished(db, claimed, ctx, result.externalId, result.permalink, "api", workerId);
     await finishAttempt(db, attemptId, { outcome: "published", phase, checkpoint });
+    if (ctx.account.provider === "zernio") {
+      // Publicou pela Zernio: problemas de configuração anteriores estão resolvidos.
+      await db.query("select app.resolve_ops_alert(k) from unnest($1::text[]) k", [Object.keys(SERVER_CONFIG_CODES)]);
+    }
     log.info("published", { job_id: claimed.id, attempt: claimed.attempt_count });
     return "published";
   } catch (raw) {
@@ -282,6 +292,15 @@ async function handleFailure(
   // ~1 min para o MESMO container sem gastar tentativa. O conector impõe o prazo total.
   if (err.code && NO_ATTEMPT_WAIT_CODES.has(err.code)) {
     const delay = Math.max(30, err.retryAfterSeconds ?? 60);
+    if (SERVER_CONFIG_CODES[err.code]) {
+      // Um alerta por problema (repetições só incrementam o contador); o cliente não é culpado.
+      await db.query("select app.raise_ops_alert($1, 'critical', null, $2, $3::jsonb, $1)", [
+        err.code,
+        SERVER_CONFIG_CODES[err.code],
+        JSON.stringify({ last_job_id: claimed.id, provider_message: err.message.slice(0, 200) }),
+      ]);
+      log.error("server configuration problem; publication waiting", { job_id: claimed.id, code: err.code });
+    }
     await transition(db, claimed.id, workerId, `status = 'failed_retryable', next_attempt_at = now() + make_interval(secs => $5), attempt_count = greatest(attempt_count - 1, 0), ${clear}`, [...base, delay]);
     await finishAttempt(db, a.attemptId, { outcome: "retry", phase: a.phase, err, checkpoint: a.checkpoint });
     log.info("publication waiting for remote processing", { job_id: claimed.id, delay_s: delay });
@@ -310,8 +329,9 @@ async function handleFailure(
 
 /**
  * Reconciliação de estados incertos: consulta a plataforma pelo checkpoint.
- * publicado → published; não recebido → retry seguro; indeterminado após 5
- * consultas → revisão humana.
+ * publicado → published; não recebido → retry seguro; ainda processando/indeterminado →
+ * nova consulta espaçada (`reconcileDelaySeconds`); sem confirmação depois de ~24 h
+ * (`RECONCILE_MAX_ATTEMPTS` consultas) → revisão humana. Nunca reenvia às cegas.
  */
 export async function reconcileUncertain(deps: Omit<PublishDeps, "leaseSeconds">, limit = 20, minAgeSeconds = 30): Promise<number> {
   const { db, log, workerId } = deps;
@@ -321,6 +341,7 @@ export async function reconcileUncertain(deps: Omit<PublishDeps, "leaseSeconds">
       where j.id in (
         select id from public.publication_jobs
          where status = 'uncertain' and updated_at < now() - make_interval(secs => $2)
+           and (reconcile_attempts = 0 or next_attempt_at <= now())
            and (lease_expires_at is null or lease_expires_at < now())
          order by updated_at limit $1 for update skip locked)
      returning j.id, j.workspace_id, j.external_checkpoint, j.reconcile_attempts`,
@@ -333,7 +354,9 @@ export async function reconcileUncertain(deps: Omit<PublishDeps, "leaseSeconds">
       "insert into public.publication_attempts (job_id, workspace_id, attempt_no, worker_id, kind) values ($1, $2, $3, $4, 'reconcile') returning id::text",
       [j.id, j.workspace_id, attemptNo, workerId],
     );
-    const release = "lease_owner = null, lease_expires_at = null, reconcile_attempts = $3";
+    // Próxima consulta espaçada (o status continua "incerto" até a plataforma responder).
+    const unlock = "lease_owner = null, lease_expires_at = null, reconcile_attempts = $3";
+    const release = `${unlock}, next_attempt_at = now() + make_interval(secs => ${reconcileDelaySeconds(attemptNo)})`;
     let state: string;
     try {
       const status = j.external_checkpoint
@@ -350,11 +373,11 @@ export async function reconcileUncertain(deps: Omit<PublishDeps, "leaseSeconds">
       } else if (status.state === "not_found") {
         // A plataforma não recebeu: repetir é seguro.
         await db.query(
-          `update public.publication_jobs set status = 'failed_retryable', next_attempt_at = now(), external_checkpoint = null, ${release}
+          `update public.publication_jobs set status = 'failed_retryable', external_checkpoint = null, ${unlock}, next_attempt_at = now()
             where id = $1 and lease_owner = $2`,
           [j.id, workerId, attemptNo],
         );
-      } else if (attemptNo >= 5) {
+      } else if (attemptNo >= RECONCILE_MAX_ATTEMPTS) {
         await db.query(
           `update public.publication_jobs set status = 'needs_review', review_reason = 'uncertain_unresolved', ${release}
             where id = $1 and lease_owner = $2`,
@@ -363,6 +386,7 @@ export async function reconcileUncertain(deps: Omit<PublishDeps, "leaseSeconds">
         await notify(db, j.workspace_id, [ctx.campaign?.created_by], "publication.needs_review", { job_id: j.id, reason: "uncertain_unresolved" });
       } else {
         await db.query(`update public.publication_jobs set ${release} where id = $1 and lease_owner = $2`, [j.id, workerId, attemptNo]);
+        log.info("publication still unconfirmed", { job_id: j.id, check: attemptNo, remote_state: state, next_check_s: reconcileDelaySeconds(attemptNo) });
       }
     } catch (e) {
       state = "error";

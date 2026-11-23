@@ -47,6 +47,10 @@ Deno.serve(async (req) => {
     simulatedAccounts: Deno.env.get("ENABLE_SIMULATED_ACCOUNTS") !== "false",
     // Segredo da Edge Function (Supabase → Edge Functions → Secrets). Nunca no código nem no navegador.
     zernioApiKey: Deno.env.get("ZERNIO_API_KEY") || undefined,
+    // Avisos por e-mail (opcionais): sem estes segredos, os avisos ficam só dentro do sistema.
+    resendApiKey: Deno.env.get("RESEND_API_KEY") || undefined,
+    emailFrom: Deno.env.get("EMAIL_FROM") || undefined,
+    appUrl: Deno.env.get("APP_URL") || undefined,
   };
   if (!env.databaseUrl || !env.supabaseUrl || !env.serviceRoleKey) {
     return new Response("missing runtime env", { status: 500 });

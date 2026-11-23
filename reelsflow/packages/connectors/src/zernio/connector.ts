@@ -229,7 +229,8 @@ export function classifyZernioError(e: unknown, sideEffect: boolean): ConnectorE
   }
   // Chave da Zernio inválida/revogada: problema de configuração do ReelsFlow, NÃO da conta do usuário.
   if (e.status === 401) return new ConnectorError("transient", "Chave da Zernio inválida ou ausente no servidor.", { ...opts, code: "zernio_api_key", retryAfterSeconds: 900 });
-  if (e.status === 402) return new ConnectorError("transient", "A Zernio exige pagamento para esta operação (limite do plano).", { ...opts, retryAfterSeconds: 3600 });
+  // Plano/pagamento da Zernio: problema da conta do ReelsFlow na Zernio, não da publicação (espera sem gastar tentativa).
+  if (e.status === 402) return new ConnectorError("transient", "A Zernio exige pagamento para esta operação (limite do plano).", { ...opts, code: "zernio_payment_required", retryAfterSeconds: 3600 });
   if (e.status === 403 && /DISCONNECTED|disconnected/.test(`${e.code} ${e.message}`)) return new ConnectorError("auth", "Conta desconectada na Zernio. Reconecte a conta.", opts);
   if (e.status === 404) return new ConnectorError("auth", "Conta ou post não encontrado na Zernio.", opts);
   return new ConnectorError("permanent", e.message, opts);
