@@ -14,23 +14,20 @@ export default async function SettingsPage({ params }: { params: Promise<{ works
   const { user, workspace, role } = await requireWorkspace(slug);
   const supabase = await createClient();
 
-  const { data: members } = await supabase
-    .from("workspace_members")
-    .select("user_id, role, created_at")
-    .eq("workspace_id", workspace.id)
-    .order("created_at");
-  const ids = (members ?? []).map((m) => m.user_id);
-  const { data: profiles } = ids.length
-    ? await supabase.from("profiles").select("id, display_name").in("id", ids)
-    : { data: [] as { id: string; display_name: string }[] };
-  const names = new Map((profiles ?? []).map((p) => [p.id, p.display_name]));
   const canAdmin = can(role, "manageMembers");
-  const [{ data: invites }, { data: usage }] = await Promise.all([
+  // Convites e uso não dependem da lista de membros: buscados em paralelo com ela.
+  const [{ data: members }, { data: invites }, { data: usage }] = await Promise.all([
+    supabase.from("workspace_members").select("user_id, role, created_at").eq("workspace_id", workspace.id).order("created_at"),
     canAdmin
       ? supabase.from("workspace_invitations").select("id, email, role, expires_at").eq("workspace_id", workspace.id).is("accepted_at", null).is("revoked_at", null).gt("expires_at", new Date().toISOString())
       : Promise.resolve({ data: [] as { id: string; email: string; role: "viewer" | "editor" | "admin" | "owner"; expires_at: string }[] }),
     supabase.rpc("workspace_usage", { p_workspace: workspace.id }),
   ]);
+  const ids = (members ?? []).map((m) => m.user_id);
+  const { data: profiles } = ids.length
+    ? await supabase.from("profiles").select("id, display_name").in("id", ids)
+    : { data: [] as { id: string; display_name: string }[] };
+  const names = new Map((profiles ?? []).map((p) => [p.id, p.display_name]));
   const u = (usage ?? {}) as { seats?: number; limits?: { seats?: number } };
 
   const ws = { id: workspace.id, slug: workspace.slug, name: workspace.name, timezone: workspace.default_timezone };

@@ -15,16 +15,15 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
   const { workspace: slug } = await params;
   const sp = await searchParams;
   const { workspace, role } = await requireWorkspace(slug);
-  const collections = await listCollections(workspace.id);
+  const query = { q: sp.q, status: sp.status, sort: sp.sort, trash: sp.trash === "1", page: Number(sp.page) || 1 };
+  // Sem filtro de coleção (o caso do clique no menu), coleções e vídeos são buscados em paralelo.
+  // Com filtro, a coleção é validada primeiro, como antes (coleção inexistente = sem filtro).
+  const [collections, unfiltered] = await Promise.all([
+    listCollections(workspace.id),
+    sp.collection ? Promise.resolve(null) : listMedia(workspace.id, query),
+  ]);
   const collection = collections.find((c) => c.id === sp.collection)?.id;
-  const result = await listMedia(workspace.id, {
-    q: sp.q,
-    status: sp.status,
-    sort: sp.sort,
-    collection,
-    trash: sp.trash === "1",
-    page: Number(sp.page) || 1,
-  });
+  const result = unfiltered ?? (await listMedia(workspace.id, { ...query, collection }));
 
   return (
     <div className="mx-auto grid max-w-7xl gap-6">
