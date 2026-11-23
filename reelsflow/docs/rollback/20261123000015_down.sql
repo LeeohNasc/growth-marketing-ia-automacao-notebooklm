@@ -2,10 +2,32 @@
 -- Só remove o que a migration criou. Nenhum dado anterior depende destes objetos.
 -- Executar SOMENTE se a Etapa 1 for revertida, e DEPOIS de voltar o worker (v4) e o site (itkbur1j6),
 -- porque o código novo usa estes objetos.
+-- TRAVA: se já existirem dados criados depois do deploy (preferências de aviso, alertas operacionais
+-- ou registros de entrega de e-mail), este script PARA sem apagar nada. Só prossegue com autorização
+-- explícita do responsável, sinalizada nesta mesma sessão por:
+--   set reelsflow.confirm_rollback_15 = 'autorizado';
+-- e, mesmo assim, copia esses dados para o esquema rf_backup antes de remover.
 begin;
+do $$
+declare v_new integer;
+begin
+  select (select count(*) from public.notification_preferences)
+       + (select count(*) from public.ops_alerts)
+       + (select count(*) from public.notifications where email_attempts > 0 or email_error is not null or emailed_at is not null)
+    into v_new;
+  if v_new > 0 and coalesce(current_setting('reelsflow.confirm_rollback_15', true), '') <> 'autorizado' then
+    raise exception 'Rollback interrompido: % registro(s) novo(s) seriam perdidos. Requer autorização explícita.', v_new;
+  end if;
+  if v_new > 0 then
+    create schema if not exists rf_backup;
+    execute 'create table if not exists rf_backup.notification_preferences_pre_rollback as select * from public.notification_preferences';
+    execute 'create table if not exists rf_backup.ops_alerts_pre_rollback as select * from public.ops_alerts';
+    execute 'create table if not exists rf_backup.notifications_email_pre_rollback as select id, email_status, email_attempts, email_error, emailed_at from public.notifications';
+  end if;
+end $$;
 do $$ begin
-  if exists (select 1 from pg_extension where extname = 'pg_cron') and exists (select 1 from cron.job where jobname = 'reelsflow-worker-watchdog') then
-    perform cron.unschedule('reelsflow-worker-watchdog');
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    execute $q$select cron.unschedule(jobid) from cron.job where jobname = 'reelsflow-worker-watchdog'$q$;
   end if;
 end $$;
 drop trigger if exists notifications_mark_email on public.notifications;
