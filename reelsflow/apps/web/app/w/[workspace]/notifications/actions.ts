@@ -24,8 +24,14 @@ export async function savePreferencesAction(formData: FormData): Promise<void> {
   if (!auth.user) return;
   const enabledTypes = new Set(formData.getAll("types").map(String).filter((t) => ALLOWED.has(t)));
   const muted = [...ALLOWED].filter((t) => !enabledTypes.has(t));
-  await supabase
+  const values = { email_enabled: formData.get("email_enabled") === "on", muted_types: muted };
+  // O banco só permite alterar estas duas colunas (sem upsert, que tentaria reescrever as chaves).
+  const { data: updated } = await supabase
     .from("notification_preferences")
-    .upsert({ user_id: auth.user.id, workspace_id: workspaceId, email_enabled: formData.get("email_enabled") === "on", muted_types: muted }, { onConflict: "user_id,workspace_id" });
+    .update(values)
+    .eq("user_id", auth.user.id)
+    .eq("workspace_id", workspaceId)
+    .select("user_id");
+  if (!updated?.length) await supabase.from("notification_preferences").insert({ user_id: auth.user.id, workspace_id: workspaceId, ...values });
   revalidatePath(`/w/${slug}/notifications`);
 }

@@ -150,6 +150,47 @@ describe("confiabilidade: configuração do servidor", () => {
   }
 });
 
+describe("confiabilidade: reconciliação com a Zernio segurando o post", () => {
+  it("resposta perdida + Zernio processa por horas: só consulta (espaçado), nunca recria; publica quando a Zernio publica", async () => {
+    const { id: accId, acc } = await zernioAccount();
+    let jobId = "";
+    let remote: "pending" | "published" = "pending";
+    const z = fakeZernio((r) => {
+      if (r.path === `accounts/${acc}`) return { body: account(acc) };
+      if (r.method === "POST" && r.path === "posts") return new TypeError("fetch failed"); // chegou lá, resposta perdida
+      if (r.method === "GET" && r.path === "posts") {
+        const body = remote === "published" ? publishedBody(acc, jobId) : postBody(acc, jobId, "scheduled", { status: "pending" });
+        return { body: { posts: [body.post] } };
+      }
+      if (r.method === "GET" && r.path.startsWith("posts/")) {
+        return { body: remote === "published" ? publishedBody(acc, jobId) : postBody(acc, jobId, "scheduled", { status: "pending" }) };
+      }
+      return undefined;
+    });
+    jobId = await dueJob(accId);
+    await tick(depsWith(z), { ...opts, reconcileMinAgeSeconds: 3600 }, { lastMaintenance: Date.now() });
+    expect((await job(jobId)).status).toBe("uncertain");
+    // 10 rodadas com a Zernio ainda processando (tempo "avança" a cada rodada)
+    for (let i = 0; i < 10; i++) {
+      await q("update public.publication_jobs set next_attempt_at = now() - interval '1 second', updated_at = now() - interval '1 minute' where id = $1", [jobId]);
+      await tick(depsWith(z), opts, { lastMaintenance: Date.now() });
+      expect((await job(jobId)).status).toBe("uncertain"); // não vai para revisão, não falha, não some
+    }
+    expect((await job(jobId)).reconcile_attempts).toBe(10);
+    // rodar de novo sem o tempo passar: NÃO consulta (espaçamento respeitado)
+    const calls = z.calls.length;
+    await tick(depsWith(z), opts, { lastMaintenance: Date.now() });
+    expect(z.calls.filter((c) => c.method === "GET").length).toBe(z.calls.slice(0, calls).filter((c) => c.method === "GET").length);
+    // a Zernio publica: a próxima consulta confirma
+    remote = "published";
+    await q("update public.publication_jobs set next_attempt_at = now() - interval '1 second', updated_at = now() - interval '1 minute' where id = $1", [jobId]);
+    await tick(depsWith(z), opts, { lastMaintenance: Date.now() });
+    expect(await job(jobId)).toMatchObject({ status: "published" });
+    expect(z.creates()).toHaveLength(1); // exatamente UM pedido de criação em toda a história
+    expect((await q("select count(*)::int n from public.external_publications where job_id = $1", [jobId]))[0].n).toBe(1);
+  });
+});
+
 describe("confiabilidade: vigia do worker (roda no banco)", () => {
   it("worker parado com publicação vencida: alerta crítico + aviso aos admins 1 vez a cada 6 h; voltou → resolvido", async () => {
     await q("delete from public.ops_alerts");

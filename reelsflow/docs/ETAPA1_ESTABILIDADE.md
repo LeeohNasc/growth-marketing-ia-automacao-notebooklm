@@ -34,27 +34,77 @@ worker `worker-tick` versão 4.
    se** `RESEND_API_KEY` e `EMAIL_FROM` forem configurados — hoje **desligado** (nenhum serviço contratado).
 
 ### Riscos registrados (não alterados — exigem autorização)
-- **Worker baixa o próprio código do GitHub** a cada inicialização (função v4 importa de
-  `raw.githubusercontent.com`, fixado em 8131fae). Se o GitHub falhar ou o repositório ficar privado,
-  as publicações param. Correção pronta: publicar a função com o pacote embutido (`index.ts` +
-  `worker.bundle.js`, já gerado nesta branch).
+- **Worker com código vindo do GitHub** (função v4 importa de `raw.githubusercontent.com`, fixado em
+  8131fae). Correção da avaliação inicial: o Supabase empacota as dependências **no deploy** (ESZip; a v4
+  tem `ezbr_sha256`), então o GitHub é necessário para *publicar/republicar* a função, não a cada
+  inicialização. O risco real: um novo deploy ou rollback depende do GitHub estar acessível e do arquivo
+  continuar público; e o código em execução não fica versionado junto da função. O pacote embutido
+  (`index.ts` + `worker.bundle.js`, só `npm:` fixados e módulos nativos) remove o GitHub de todo o caminho.
 - **Contas simuladas ligadas em produção** (`ENABLE_SIMULATED_ACCOUNTS` ausente = ligado). Recomendado
-  `false` antes de abrir para clientes.
+  `false` antes de abrir para clientes (fora deste deploy).
 - **URL do vídeo vale 24 h** para a Zernio. Se a Zernio segurar um post por mais de 24 h, o download
   falha e a publicação vira falha com motivo (não duplica).
+- **Integração futura (Etapa 3)**: a fusão de código com a branch unificada conflita só em
+  `apps/worker/src/worker.ts` (dois passos novos na manutenção) — trivial. As migrations 12–14 foram
+  testadas aplicadas DEPOIS da 15 (cenário real): 151 testes de banco + 82 do worker da branch unificada
+  e os 16 da Etapa 1, todos verdes.
 
-## Checklist de publicação (quando autorizado)
-1. Backup: exportar o banco (Supabase → Database → Backups; plano gratuito não tem PITR — fazer
-   `pg_dump` antes).
-2. Aplicar a migration `20261123000015_reliability_alerts.sql` (só acrescenta tabelas, colunas, funções
-   e o agendamento do vigia). Rollback: `cron.unschedule('reelsflow-worker-watchdog')`, remover o
-   trigger `notifications_mark_email` e as tabelas novas — nenhum dado antigo depende delas.
-3. Publicar a função `worker-tick` com `index.ts` + `worker.bundle.js` (sem dependência do GitHub).
-   Rollback: republicar a versão 4.
-4. Deploy do web (Vercel) desta branch. Rollback: promover `itkbur1j6` de volta.
-5. Opcional: `ENABLE_SIMULATED_ACCOUNTS=false`; segredos de e-mail (`RESEND_API_KEY`, `EMAIL_FROM` com
-   domínio verificado, `APP_URL`).
-6. Conferir: `select public.worker_watchdog();` → `stalled: false`; `select * from ops_alerts where resolved_at is null;` vazio.
+## Revisão final de segurança e compatibilidade (antes do deploy)
+| Verificação | Resultado |
+|---|---|
+| Migration 15 × produção (nomes, colunas, extensões) | sem conflitos; pg_cron 1.6.4 presente; 6 notificações antigas sem e-mail retroativo |
+| Migration 15 × 12/13/14 (duas ordens) | aplica nas duas; suítes de todas as branches verdes |
+| Worker atual (v4) com a migration 15 aplicada | roda normalmente (testado em Deno 2.9.6) → migration pode ir primeiro |
+| Pacote novo sem código remoto | confirmado (só `npm:` com versão fixa e `node:`) |
+| Reconciliação | nunca recria o post (teste: 10 consultas com a Zernio processando → publica com 1 único pedido) |
+| Alertas sem e-mail | notificações no sistema, `ops_alerts` e vigia independem do provedor (testado) |
+| Preferências na tela | defeito encontrado e corrigido (upsert bloqueado pela permissão por coluna); validado inserir e atualizar |
+| Card Editorial (correção pendente) | 29/29 testes de renderização real |
+
+## Roteiro de deploy (ordem exata) — somente com autorização
+**Antes (passo 0 — backup e referência, só leitura):**
+- exportar via SQL as linhas das tabelas `publication_jobs`, `external_publications`, `campaigns`,
+  `media_assets`, `social_accounts`, `editorial_cards`, `notifications`, `workspaces` para arquivo local
+  privado (fora do repositório). O plano gratuito não tem backup baixável/PITR;
+- registrar a assinatura (md5) das mesmas tabelas. Referência de 23/11: campaigns 1 `cc61d9ac`,
+  editorial_cards 2 `2f469b71`, external_publications 1 `9ff39d11`, media_assets 16 `332316b4`,
+  migrations 11 `d4d3d9bb`, notifications 6 `8c4e48e1`, publication_jobs 1 `896809df`,
+  social_accounts 2 `c556e480`, workspaces 2 `84df6dec`;
+- rollback pronto: `docs/rollback/20261123000015_down.sql`, `docs/rollback/worker-tick-v4/`
+  (index + pacote de 8131fae, sha256 `2d6dfaae`), site anterior `dpl_7yDQAD9ZfqyLbcY9asNDhqwwyVGn`.
+
+**Passo 1 — migration 15** (aditiva; o worker v4 e o site atual continuam funcionando com ela).
+Testes logo após:
+1. objetos criados (`ops_alerts`, `notification_preferences`, 3 colunas em `notifications`, trigger);
+2. `cron.job` contém `reelsflow-worker-watchdog` (*/5) além dos 2 jobs atuais;
+3. `select public.worker_watchdog()` → `stalled: false`; `ops_alerts` abertos = 0;
+4. assinaturas das tabelas iguais à referência (notifications comparada sem as 3 colunas novas);
+5. 3 ciclos do worker v4 depois (≈3 min): `cron.job_run_details` sem falha, worker com sinal < 2 min.
+
+**Passo 2 — função `worker-tick` v5** (`index.ts` + `worker.bundle.js` desta branch, `verify_jwt` desligado,
+mesmos segredos). Testes logo após (10 min):
+1. respostas do cron 2xx, sem timeout; logs `tick done` com `email_configured:false`, sem `tick failed`;
+2. worker com sinal < 2 min; `worker_watchdog()` → `stalled: false`;
+3. notificações novas importantes ficam `skipped/provider_not_configured` (esperado, sem provedor);
+4. assinaturas das tabelas inalteradas.
+
+**Passo 3 — site (Vercel)**: primeiro um deploy de *preview* desta branch apontando para a produção do
+Supabase, conferir, e só então promover. Testes no preview e depois em produção:
+1. login; Visão Geral; Fila/Histórico mostram o Reel publicado com o link; Biblioteca com 15 vídeos;
+2. Campanhas mostra a campanha concluída; Card Editorial abre e preserva os arquivos escolhidos;
+3. Notificações: lista e "Avisos por e-mail" salvam (inserir e alterar);
+4. nenhuma resposta 5xx nos logs da Vercel.
+
+**Passo 4 — observação 24 h** (eu verifico em intervalos): cron, worker, `ops_alerts`, assinaturas.
+
+**Interromper e reverter se:**
+- a migration falhar (ela roda em transação: nada fica pela metade) → parar, sem rollback necessário;
+- qualquer assinatura de dado existente mudar → reverter o passo atual e investigar;
+- worker sem sinal > 3 min, resposta não-2xx ou `tick failed` após o passo 2 → republicar a v4
+  (`docs/rollback/worker-tick-v4/`);
+- erro 5xx ou tela quebrada após o passo 3 → promover `dpl_7yDQAD9ZfqyLbcY9asNDhqwwyVGn`;
+- alerta crítico inesperado em `ops_alerts`.
+Ordem do rollback completo: site → worker v4 → `20261123000015_down.sql`.
 
 ## Plano — teste real de 7 dias (NÃO iniciado; aguarda autorização)
 - **Conta**: somente @pipocoumemes (conta `bef6f5b6…`, via Zernio). Nenhuma outra rede.
