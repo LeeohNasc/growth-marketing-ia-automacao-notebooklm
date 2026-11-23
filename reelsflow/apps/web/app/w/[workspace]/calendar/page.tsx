@@ -56,31 +56,26 @@ export default async function CalendarPage({
     supabase.from("social_accounts").select("id, display_name").eq("workspace_id", workspace.id).order("display_name"),
   ]);
 
-  // Miniaturas (até 300 por tela)
-  const ids = [...new Set(items.map((i) => i.id))];
-  const { data: rows } = ids.length
-    ? await supabase.from("publication_jobs").select("id, media_asset_id, local_time").in("id", ids)
-    : { data: [] as { id: string; media_asset_id: string | null; local_time: string }[] };
-  const mediaIds = [...new Set((rows ?? []).map((r) => r.media_asset_id).filter((x): x is string => Boolean(x)))].slice(0, 300);
-  const { data: media } = mediaIds.length ? await supabase.from("media_assets").select("id, thumbnail_path").in("id", mediaIds) : { data: [] as { id: string; thumbnail_path: string | null }[] };
-  const thumbs = await signPaths((media ?? []).map((m) => m.thumbnail_path).filter((p): p is string => Boolean(p)), 3600);
-  const thumbByMedia = new Map((media ?? []).map((m) => [m.id, m.thumbnail_path ? (thumbs.get(m.thumbnail_path) ?? null) : null]));
-  const rowById = new Map((rows ?? []).map((r) => [r.id, r]));
+  // Miniaturas (até 300 vídeos por tela). Horário local e caminho da miniatura já vêm de listJobs:
+  // antes eram mais 2 consultas em fila (publication_jobs de novo + media_assets).
+  const thumbPathByMedia = new Map<string, string>();
+  for (const j of items) if (j.mediaAssetId && j.thumbnailPath && thumbPathByMedia.size < 300) thumbPathByMedia.set(j.mediaAssetId, j.thumbnailPath);
+  const thumbs = await signPaths([...new Set(thumbPathByMedia.values())], 3600);
+  const thumbByMedia = new Map([...thumbPathByMedia].map(([id, path]) => [id, thumbs.get(path) ?? null]));
 
   const jobs: CalendarJob[] = items.map((j) => {
     const z = Temporal.Instant.from(j.scheduled_at).toZonedDateTimeISO(tz);
-    const row = rowById.get(j.id);
     return {
       id: j.id,
       date: z.toPlainDate().toString(),
       time: `${String(z.hour).padStart(2, "0")}:${String(z.minute).padStart(2, "0")}`,
-      jobLocalTime: (row?.local_time ?? "00:00").slice(0, 5),
+      jobLocalTime: (j.localTime ?? "00:00").slice(0, 5),
       status: j.status,
       media: j.media,
       account: j.account,
       platform: j.platform,
       campaign: j.campaign,
-      thumbUrl: row?.media_asset_id ? (thumbByMedia.get(row.media_asset_id) ?? null) : null,
+      thumbUrl: j.mediaAssetId ? (thumbByMedia.get(j.mediaAssetId) ?? null) : null,
     };
   });
 
