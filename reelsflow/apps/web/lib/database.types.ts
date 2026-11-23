@@ -9,6 +9,12 @@ export type WorkspaceRole = "viewer" | "editor" | "admin" | "owner";
 export type MediaStatus = "uploading" | "uploaded" | "processing" | "ready" | "failed";
 
 export type CardRenderStatus = "draft" | "rendering" | "processing" | "ready" | "error";
+export type SplitProjectRow = {
+  id: string; workspace_id: string; created_by: string | null; title: string; config: Json; top_media_id: string | null; bottom_media_id: string | null;
+  render_status: CardRenderStatus; render_error: string | null; rendered_media_id: string | null; render_started_at: string | null; rendered_at: string | null;
+  created_at: string; updated_at: string;
+};
+type SplitProjectUpdate = { title?: string; config?: Json; top_media_id?: string | null; bottom_media_id?: string | null };
 export type EditorialCardRow = {
   id: string; workspace_id: string; created_by: string | null; template_type: "editorial_card"; template_version: number;
   title: string; page_name: string; username: string; headline: string; caption: string | null; hashtags: string[];
@@ -56,6 +62,7 @@ export type MediaAssetRow = {
   kind: "video" | "image";
   /** Card Editorial que gerou este arquivo final (se houver). */
   source_card_id: string | null;
+  source_split_id?: string | null;
 };
 
 type Timestamps = { created_at: string };
@@ -186,6 +193,12 @@ export type Database = {
         Update: EditorialCardUpdate;
         Relationships: [];
       };
+      split_projects: {
+        Row: SplitProjectRow;
+        Insert: Pick<SplitProjectRow, "workspace_id" | "created_by" | "title"> & SplitProjectUpdate;
+        Update: SplitProjectUpdate;
+        Relationships: [];
+      };
       media_assets: {
         Row: MediaAssetRow;
         Insert: never;
@@ -293,6 +306,10 @@ export type Database = {
       set_card_render_state: { Args: { p_card: string; p_state: "rendering" | "error" | "draft"; p_error?: string | null }; Returns: CardRenderStatus };
       attach_card_render: { Args: { p_card: string; p_media: string }; Returns: CardRenderStatus };
       duplicate_editorial_card: { Args: { p_card: string }; Returns: string };
+      set_split_render_state: { Args: { p_project: string; p_state: "rendering" | "error" | "draft"; p_error?: string | null }; Returns: CardRenderStatus };
+      attach_split_render: { Args: { p_project: string; p_media: string }; Returns: CardRenderStatus };
+      duplicate_split_project: { Args: { p_project: string }; Returns: string };
+      delete_split_project: { Args: { p_project: string }; Returns: undefined };
       delete_editorial_card: { Args: { p_card: string }; Returns: undefined };
       create_workspace: {
         Args: { p_name: string; p_timezone: string };

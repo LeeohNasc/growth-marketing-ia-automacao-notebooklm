@@ -1,6 +1,6 @@
 "use server";
 import { redirect } from "next/navigation";
-import { DEFAULT_CARD_STYLE, can } from "@reelsflow/domain";
+import { DEFAULT_CARD_STYLE, DEFAULT_SPLIT, can } from "@reelsflow/domain";
 import { requireWorkspace } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 
@@ -52,4 +52,36 @@ export async function deleteCardAction(formData: FormData) {
   const supabase = await createClient();
   const { error } = await supabase.rpc("delete_editorial_card", { p_card: String(formData.get("card") ?? "") });
   redirect(`/w/${slug}/create${error ? "?e=delete" : "?ok=deleted"}`);
+}
+
+/** Novo projeto de Tela Dividida (rascunho com o layout padrão: 50/50, áudio do superior). */
+export async function createSplitAction(formData: FormData) {
+  const slug = String(formData.get("slug") ?? "");
+  const { workspace, user, role } = await requireWorkspace(slug);
+  if (!can(role, "editContent")) redirect(`/w/${slug}/create?e=forbidden`);
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("split_projects")
+    .insert({ workspace_id: workspace.id, created_by: user.id, title: "Tela dividida sem título", config: DEFAULT_SPLIT })
+    .select("id")
+    .single();
+  if (error || !data) redirect(`/w/${slug}/create?e=create`);
+  redirect(`/w/${slug}/create/split/${data.id}`);
+}
+
+export async function duplicateSplitAction(formData: FormData) {
+  const slug = String(formData.get("slug") ?? "");
+  await requireWorkspace(slug);
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("duplicate_split_project", { p_project: String(formData.get("project") ?? "") });
+  if (error || !data) redirect(`/w/${slug}/create?e=duplicate`);
+  redirect(`/w/${slug}/create/split/${data}`);
+}
+
+export async function deleteSplitAction(formData: FormData) {
+  const slug = String(formData.get("slug") ?? "");
+  await requireWorkspace(slug);
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("delete_split_project", { p_project: String(formData.get("project") ?? "") });
+  redirect(`/w/${slug}/create${error ? "?e=delete" : "?ok=split_deleted"}`);
 }

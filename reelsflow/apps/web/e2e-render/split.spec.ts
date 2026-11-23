@@ -32,11 +32,14 @@ function band(f: string, hz: number): number {
   const r = spawnSync("ffmpeg", ["-nostats", "-ss", "1", "-t", "2", "-i", f, "-af", `bandpass=f=${hz}:width_type=q:w=30,volumedetect`, "-f", "null", "-"], { encoding: "utf8" });
   return Number(/mean_volume: (-?[\d.]+)/.exec(r.stderr)?.[1] ?? -99);
 }
+type Stream = { codec_type: string; [k: string]: unknown };
+type RFWin = { rf: { split: (...a: unknown[]) => Promise<unknown>; splitProbe: (u: string) => Promise<{ error?: string }>; canMixAudio: () => Promise<boolean> } };
+const streams = (f: string) => ffprobe(f).streams as Stream[];
 const near = (a: number[], b: number[], tol = 40) => a.every((v, i) => Math.abs(v - b[i]!) <= tol);
 const RED = [214, 40, 40], BLUE = [29, 78, 216], GREEN = [21, 128, 61];
 
 async function render(page: Page, cfg: unknown, top: string, bottom: string) {
-  return page.evaluate(([c, t, b]) => (window as any).rf.split(c, t, b), [cfg, `${FX}/${top}`, `${FX}/${bottom}`] as const) as Promise<{
+  return page.evaluate(([c, t, b]) => (window as unknown as RFWin).rf.split(c, t, b), [cfg, `${FX}/${top}`, `${FX}/${bottom}`] as const) as Promise<{
     data?: string; thumb?: string | null; durationS?: number; hasAudio?: boolean; audioPath?: string; ms?: number; error?: string; message?: string;
   }>;
 }
@@ -44,7 +47,7 @@ async function render(page: Page, cfg: unknown, top: string, bottom: string) {
 test.describe("Tela Dividida — arquivo final", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/");
-    await page.waitForFunction(() => Boolean((window as any).rf));
+    await page.waitForFunction(() => Boolean((window as unknown as Partial<RFWin>).rf));
   });
 
   test("50/50 padrão: H.264 1080×1920 30 fps yuv420p, superior em cima, inferior embaixo, áudio do superior copiado", async ({ page }) => {
@@ -54,8 +57,8 @@ test.describe("Tela Dividida — arquivo final", () => {
     const f = save("split-50-50-audio-top.mp4", r.data!);
     if (r.thumb) save("split-50-50-thumb.jpg", r.thumb);
     const info = ffprobe(f);
-    const v = info.streams.find((s: any) => s.codec_type === "video");
-    const a = info.streams.find((s: any) => s.codec_type === "audio");
+    const v = (info.streams as Stream[]).find((s) => s.codec_type === "video");
+    const a = (info.streams as Stream[]).find((s) => s.codec_type === "audio");
     expect(v).toMatchObject({ codec_name: "h264", width: 1080, height: 1920, pix_fmt: "yuv420p", r_frame_rate: "30/1" });
     expect(a).toMatchObject({ codec_name: "aac" });
     // duração = superior (principal) 6 s
@@ -105,14 +108,14 @@ test.describe("Tela Dividida — arquivo final", () => {
     const mute = await render(page, { audio: { mode: "mute" } }, "split-top.mp4", "split-noaudio.mp4");
     expect(mute.error, mute.message).toBeUndefined();
     const info = ffprobe(save("split-mute.mp4", mute.data!));
-    expect(info.streams.some((s: any) => s.codec_type === "audio")).toBe(false);
+    expect((info.streams as Stream[]).some((s) => s.codec_type === "audio")).toBe(false);
     const bad = await render(page, { audio: { mode: "bottom" } }, "split-top.mp4", "split-noaudio.mp4");
     expect(bad.error).toBe("blocked");
     expect(bad.message).toContain("inferior não tem áudio");
   });
 
   test("mistura com volumes e reamostragem 44,1 kHz mono: os dois tons presentes (ou erro claro se o navegador não gera AAC)", async ({ page }) => {
-    const canMix = await page.evaluate(() => (window as any).rf.canMixAudio());
+    const canMix = await page.evaluate(() => (window as unknown as RFWin).rf.canMixAudio());
     const r = await render(page, { audio: { mode: "mix", topVolume: 1, bottomVolume: 0.5 }, duration: "shortest" }, "split-top.mp4", "split-podcast-44k.mp4");
     test.info().annotations.push({ type: "aac-encoder", description: String(canMix) });
     if (!canMix) {
@@ -123,7 +126,7 @@ test.describe("Tela Dividida — arquivo final", () => {
     expect(r.error, r.message).toBeUndefined();
     expect(r.audioPath).toBe("mixed");
     const f = save("split-mix.mp4", r.data!);
-    const a = ffprobe(f).streams.find((s: any) => s.codec_type === "audio");
+    const a = streams(f).find((s) => s.codec_type === "audio");
     expect(a).toMatchObject({ codec_name: "aac", sample_rate: "48000", channels: 2 });
     // 440 Hz (superior, 100%) e 660 Hz (podcast 44,1 kHz reamostrado, 50%) presentes; 880 Hz não existe
     const [a440, a660] = [band(f, 440), band(f, 660)];
@@ -135,7 +138,7 @@ test.describe("Tela Dividida — arquivo final", () => {
   });
 
   test("origem inválida: corrompido e HEVC não decodificável dão erro claro", async ({ page }) => {
-    const bad = await page.evaluate(() => (window as any).rf.splitProbe("/fixtures/corrupt.mp4"));
+    const bad = await page.evaluate(() => (window as unknown as RFWin).rf.splitProbe("/fixtures/corrupt.mp4"));
     expect(bad.error).toBe("no_video");
     const r = await render(page, {}, "split-top.mp4", "corrupt.mp4");
     expect(r.error).toBe("no_video");

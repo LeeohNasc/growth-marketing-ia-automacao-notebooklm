@@ -27,14 +27,14 @@ export default async function setup() {
   // Tela Dividida: cores sólidas distintas (para conferir posição por pixel) e tons distintos (para
   // conferir qual áudio entrou): superior 1920×1080 30 fps 6 s 440 Hz; inferior 720×1280 24 fps 4 s 880 Hz;
   // podcast 44,1 kHz mono 5 s 660 Hz (testa reamostragem); sem áudio 3 s.
-  const solid = (color: string, size: string, rate: number, t: number) => `color=c=${color}:s=${size}:rate=${rate},drawbox=x=0:y=0:w=iw/6:h=ih/6:color=white:t=fill`;
-  ff("-f", "lavfi", "-i", solid("0xd62828", "1920x1080", 30, 6), "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "6",
+  const solid = (color: string, size: string, rate: number) => `color=c=${color}:s=${size}:rate=${rate},drawbox=x=0:y=0:w=iw/6:h=ih/6:color=white:t=fill`;
+  ff("-f", "lavfi", "-i", solid("0xd62828", "1920x1080", 30), "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "6",
      "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-ac", "2", "-ar", "48000", "-shortest", "-movflags", "+faststart", path.join(fx, "split-top.mp4"));
-  ff("-f", "lavfi", "-i", solid("0x1d4ed8", "720x1280", 24, 4), "-f", "lavfi", "-i", "sine=frequency=880:sample_rate=48000", "-t", "4",
+  ff("-f", "lavfi", "-i", solid("0x1d4ed8", "720x1280", 24), "-f", "lavfi", "-i", "sine=frequency=880:sample_rate=48000", "-t", "4",
      "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-ac", "2", "-ar", "48000", "-shortest", "-movflags", "+faststart", path.join(fx, "split-bottom.mp4"));
-  ff("-f", "lavfi", "-i", solid("0x15803d", "1280x720", 25, 5), "-f", "lavfi", "-i", "sine=frequency=660:sample_rate=44100", "-t", "5",
+  ff("-f", "lavfi", "-i", solid("0x15803d", "1280x720", 25), "-f", "lavfi", "-i", "sine=frequency=660:sample_rate=44100", "-t", "5",
      "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-ac", "1", "-ar", "44100", "-shortest", path.join(fx, "split-podcast-44k.mp4"));
-  ff("-f", "lavfi", "-i", solid("0xf59e0b", "1080x1080", 30, 3), "-t", "3", "-c:v", "libx264", "-pix_fmt", "yuv420p", path.join(fx, "split-noaudio.mp4"));
+  ff("-f", "lavfi", "-i", solid("0xf59e0b", "1080x1080", 30), "-t", "3", "-c:v", "libx264", "-pix_fmt", "yuv420p", path.join(fx, "split-noaudio.mp4"));
 
 
   await build({

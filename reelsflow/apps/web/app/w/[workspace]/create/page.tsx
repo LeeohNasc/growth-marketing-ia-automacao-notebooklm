@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Newspaper, Plus } from "lucide-react";
+import { Columns2, Newspaper, Plus } from "lucide-react";
 import { CARD_FORMATS, can } from "@reelsflow/domain";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import type { CardRenderStatus } from "@/lib/database.types";
 import { requireWorkspace } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
-import { createCardAction } from "./actions";
+import { createCardAction, createSplitAction } from "./actions";
 
 export const metadata: Metadata = { title: "Criar publicação" };
 
@@ -38,6 +38,12 @@ export default async function CreatePage({ params, searchParams }: { params: Pro
     .eq("workspace_id", workspace.id)
     .order("updated_at", { ascending: false })
     .limit(200);
+  const { data: splits } = await supabase
+    .from("split_projects")
+    .select("id, title, config, render_status, updated_at")
+    .eq("workspace_id", workspace.id)
+    .order("updated_at", { ascending: false })
+    .limit(200);
   const canEdit = can(role, "editContent");
   const fmt = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: workspace.default_timezone });
 
@@ -49,6 +55,7 @@ export default async function CreatePage({ params, searchParams }: { params: Pro
       </div>
       {sp.e && ERRORS[sp.e] && <Alert variant="destructive">{ERRORS[sp.e]}</Alert>}
       {sp.ok === "deleted" && <Alert variant="success">Card excluído. O arquivo final (se houver) continua na Biblioteca.</Alert>}
+      {sp.ok === "split_deleted" && <Alert variant="success">Projeto excluído. Os vídeos de origem e os vídeos finais continuam na Biblioteca.</Alert>}
 
       <section className="grid gap-3">
         <h2 className="text-sm font-medium text-muted-foreground">Modelos</h2>
@@ -74,6 +81,28 @@ export default async function CreatePage({ params, searchParams }: { params: Pro
             )}
           </CardContent>
         </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Columns2 className="size-5 rotate-90" aria-hidden /> Tela Dividida
+            </CardTitle>
+            <CardDescription>
+              Dois vídeos em um só Reel vertical (1080×1920): um em cima, outro embaixo. Proporção 50/50, 60/40 ou 40/60, enquadramento, trechos e escolha do áudio. Gera MP4 pronto para publicar.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {canEdit ? (
+              <form action={createSplitAction}>
+                <input type="hidden" name="slug" value={slug} />
+                <Button type="submit">
+                  <Plus /> Nova Tela Dividida
+                </Button>
+              </form>
+            ) : (
+              <p className="text-sm text-muted-foreground">Somente editores podem criar projetos.</p>
+            )}
+          </CardContent>
+        </Card>
       </section>
 
       <section className="grid gap-3">
@@ -95,6 +124,26 @@ export default async function CreatePage({ params, searchParams }: { params: Pro
                 </span>
                 <Badge variant={STATUS[c.render_status].variant}>{STATUS[c.render_status].label}</Badge>
                 <span className="text-xs tabular-nums text-muted-foreground">{fmt.format(new Date(c.updated_at))}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="grid gap-3">
+        <h2 className="text-sm font-medium text-muted-foreground">Suas telas divididas</h2>
+        {(splits?.length ?? 0) === 0 ? (
+          <p className="rounded-xl border border-dashed py-10 text-center text-sm text-muted-foreground">Nenhum projeto de tela dividida ainda.</p>
+        ) : (
+          <ul className="divide-y rounded-xl border">
+            {splits!.map((p) => (
+              <li key={p.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                <Link href={`/w/${slug}/create/split/${p.id}`} className="min-w-0 flex-1 truncate font-medium hover:underline">
+                  {p.title}
+                </Link>
+                <span className="text-xs text-muted-foreground">{((p.config ?? {}) as { ratio?: string }).ratio ?? "50/50"}</span>
+                <Badge variant={STATUS[p.render_status].variant}>{STATUS[p.render_status].label}</Badge>
+                <span className="text-xs tabular-nums text-muted-foreground">{fmt.format(new Date(p.updated_at))}</span>
               </li>
             ))}
           </ul>
