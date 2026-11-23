@@ -122,3 +122,18 @@ Ordem do rollback completo: site → worker v4 → `20261123000015_down.sql`.
   ou alerta crítico sem causa clara. Como: pausar a campanha (um clique) ou a fila do workspace.
 - **Custo**: a Zernio é cobrada por uso; o gasto até agora é 0 e o preço por publicação **não está
   confirmado** — verificar no painel da Zernio antes de iniciar.
+
+## Diário do deploy em produção — 23/11/2026 (UTC)
+| Hora | Passo | Resultado |
+|---|---|---|
+| 02:14 | 0 · backup | cópia de 13 tabelas no esquema `rf_backup` (sufixo `_20261123`), idêntica linha a linha; sem acesso pela API |
+| 02:16 | 1 · migration 15 | aplicada (transação); objetos e vigia criados; assinaturas idênticas; 3 ciclos do worker v4 sem falha |
+| 02:20 | 2 · worker v5 | publicado (versão 5, `verify_jwt` desligado). **Desvio autorizado**: pacote importado do GitHub fixado no commit `0a9d4c2` (sha256 `7043ea31…`, conferido byte a byte), não embutido — a ferramenta de deploy exigiria transcrever 2.946 linhas sem verificação por assinatura. Dependência do GitHub só em deploys futuros (como na v4) |
+| 02:20–02:32 | 2 · testes | 12 ciclos 202, 0 erros, vigia ativo, Zernio saudável (checagem feita pelo v5), assinaturas idênticas |
+| 02:35 | 3 · prévia | `reelsflow-9xfmaexw8` — páginas públicas 200, rotas protegidas → login; testes logados com conta temporária autorizada: 8 telas 200, editor do Card, preferências (inserir/alterar), 0 erros |
+| 02:41 | 3 · produção | `dpl_Dw6UZ7FpiXJxY3Gf6UQ6L9Dmxdqk` em `reelsflow-xi.vercel.app` (deploy de produção do mesmo commit, variáveis de produção); mesmos testes: tudo ok |
+| 02:43 | 3 · limpeza | conta temporária, 2 workspaces de teste, cards e preferências removidos (com travas); usuários = 3 |
+| 02:45 | 4 · observação | 25 ciclos sem erro, 6 execuções do vigia, 0 alertas, assinaturas idênticas; verificações agendadas em +1 h, +8 h e +24 h |
+
+Rollback disponível: site `dpl_7yDQAD9ZfqyLbcY9asNDhqwwyVGn`; worker `docs/rollback/worker-tick-v4/`;
+banco `docs/rollback/20261123000015_down.sql` (com trava contra perda de dados novos).
