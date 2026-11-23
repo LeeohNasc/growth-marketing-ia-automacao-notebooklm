@@ -137,3 +137,52 @@ Ordem do rollback completo: site → worker v4 → `20261123000015_down.sql`.
 
 Rollback disponível: site `dpl_7yDQAD9ZfqyLbcY9asNDhqwwyVGn`; worker `docs/rollback/worker-tick-v4/`;
 banco `docs/rollback/20261123000015_down.sql` (com trava contra perda de dados novos).
+
+### Observação — ocorrências (até 11:05 UTC de 23/11)
+Medição: 525 execuções do agendador (`reelsflow-worker-tick`), 0 falhas; 525 `tick done`, 0 `tick failed`;
+106 execuções do vigia; 0 `ops_alerts`; assinaturas dos dados inalteradas; Zernio `healthy` (checagem 10:56).
+
+| Minuto (UTC) | O que os registros mostram | Causa | Efeito |
+|---|---|---|---|
+| 07:20 | sem linha no log de borda da função, mas pg_net registrou **202** e o worker registrou `booted` + `tick done` | falha só no registro de log da borda (a chamada aconteceu) | nenhum |
+| 08:40 | cron `succeeded` (apenas enfileira); pg_net: **timeout de 5 s inteiramente na resolução de DNS**, 0 ms de conexão; a função não recebeu chamada | falha transitória de DNS na rede do Supabase (pg_net), fora do código do ReelsFlow | 1 ciclo pulado; o das 08:41 rodou normalmente |
+
+Por que um ciclo pulado não gera duplicata nem perda: o worker é sem estado entre ciclos; publicações vencidas
+são reivindicadas no ciclo seguinte (tolerância de atraso de 120 min) e a idempotência na Zernio impede
+reenvio. Conferido: `publication_attempts` = 1, `external_publications` = 1, nenhuma publicação pendente.
+Limite da evidência: o pg_net guarda respostas por só 6 h, então falhas anteriores às últimas 6 h só aparecem
+pela ausência no log de borda (método usado acima). O vigia só alerta após 5 min sem sinal — por desenho,
+1 ciclo pulado não alerta.
+
+## Mudança de região da Vercel para gru1 — procedimento (NÃO executado; aguarda autorização)
+Situação atual (lida pela API): projeto com região `iad1`; produção `dpl_Dw6UZ7FpiXJxY3Gf6UQ6L9Dmxdqk`
+(READY, commit `0356e74`, árvore limpa); variáveis de produção = 3 `NEXT_PUBLIC_*`, alteradas pela última vez
+em 21/11 (antes deste deploy → o novo usará os mesmos valores). Banco em `sa-east-1` (São Paulo).
+A região é gravada **em cada deploy** (prévias `iad1` e `gru1` do mesmo código coexistiram): mudar de região
+exige um novo build, e voltar não exige build.
+
+1. **Preparar** (sem efeito em produção): `git worktree add /tmp/rf-0356e74 0356e74`; copiar `.vercel/project.json`.
+2. **Build de produção sem trocar o domínio**: no worktree,
+   `vercel deploy --prod --skip-domain --regions gru1 --yes` → cria um deploy de produção (variáveis de
+   produção) que **ainda não recebe tráfego**.
+3. **Conferir antes de promover**:
+   - a API mostra `regions: ["gru1"]`, `target: production`, `gitCommitSha` 0356e74;
+   - a lista de arquivos de `apps/`, `packages/`, `supabase/` e `pnpm-lock.yaml` é idêntica à de
+     `dpl_Dw6UZ7` (diferem só amostras de teste ignoradas pelo git);
+   - na URL única, com o cabeçalho de bypass: `x-vercel-id` contém `gru1`; páginas públicas 200;
+     rotas protegidas → login; teste logado com conta temporária (só se autorizada);
+   - qualquer falha → **não promover** (produção continua intacta) e parar.
+4. **Promover**: `vercel promote <url do deploy gru1>`; conferir `reelsflow-xi.vercel.app` com
+   `x-vercel-id` `gru1` e repetir os testes do passo 3.
+5. **Observar 30 min**: logs da Vercel sem 5xx; worker/cron inalterados (não dependem da Vercel).
+6. **Alinhar a configuração do projeto** (só depois de estável): região padrão do projeto → `gru1`, para que
+   um deploy futuro sem `--regions` não volte em silêncio para `iad1`.
+
+**Rollback** (sem build, segundos): `vercel promote dpl_Dw6UZ7FpiXJxY3Gf6UQ6L9Dmxdqk` (ou `vercel rollback`);
+o deploy antigo mantém `iad1`. Se o passo 6 já foi feito, voltar a região do projeto para `iad1`.
+Não executado aqui: o plano Hobby permite rollback instantâneo para o deploy de produção imediatamente
+anterior — que será exatamente o `dpl_Dw6UZ7`. Banco, worker e Zernio não mudam nesta operação.
+
+**Pendência registrada (não alterada):** o envio do CLI inclui arquivos não versionados
+(`apps/web/e2e-render/samples/`, fixtures). Não afetam o app, mas convém incluí-los no `.vercelignore` num
+deploy futuro autorizado; o worktree limpo do passo 1 já os exclui.
