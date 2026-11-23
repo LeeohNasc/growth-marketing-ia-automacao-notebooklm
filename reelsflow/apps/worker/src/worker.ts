@@ -5,6 +5,7 @@ import type { CredentialProvider } from "./publishing/credentials";
 import { executePublication, reconcileUncertain } from "./publishing/execute";
 import { maintainInstagramTokens } from "./publishing/tokens";
 import { syncZernioAccounts } from "./publishing/zernio-accounts";
+import { syncContentMetrics } from "./publishing/metrics-sync";
 import type { GraphClient, TokenCipher, ZernioClient } from "@reelsflow/connectors/server";
 import { claimPublications, promoteDue, reapPublicationLeases } from "./publishing/scheduler";
 import { handlePurge } from "./handlers/purge";
@@ -21,6 +22,8 @@ export type WorkerOptions = {
   leaseSeconds: number;
   pollMs: number;
   maintenanceEveryMs?: number;
+  /** Sincronização de métricas de conteúdo (padrão: ligada quando há Zernio). */
+  contentMetrics?: boolean;
   reconcileMinAgeSeconds?: number;
 };
 
@@ -76,6 +79,13 @@ export async function tick(deps: WorkerDeps, opts: WorkerOptions, state: { lastM
         await syncZernioAccounts(deps.db, { zernio: deps.zernio, log: deps.log });
       } catch (e) {
         deps.log.error("zernio account sync failed", { error: String(e) });
+      }
+    }
+    if (deps.zernio && opts.contentMetrics !== false) {
+      try {
+        await syncContentMetrics(deps.db, { zernio: deps.zernio, log: deps.log });
+      } catch (e) {
+        deps.log.error("content metrics sync failed", { error: String(e) });
       }
     }
     if (deps.instagramTokens) {

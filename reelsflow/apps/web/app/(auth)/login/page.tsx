@@ -24,7 +24,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       <LoginForm next={next} />
       <p className="text-center text-sm text-muted-foreground">
         Não tem conta?{" "}
-        <Link href="/signup" className="font-medium text-foreground underline-offset-4 hover:underline">
+        <Link href={next ? `/signup?next=${encodeURIComponent(next)}` : "/signup"} className="font-medium text-foreground underline-offset-4 hover:underline">
           Criar conta
         </Link>
       </p>

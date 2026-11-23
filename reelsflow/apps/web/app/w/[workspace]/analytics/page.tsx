@@ -1,13 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Temporal } from "temporal-polyfill";
+import { BarChart3, Lightbulb, ListOrdered, PlaySquare } from "lucide-react";
 import { SOCIAL_PLATFORM_LABELS } from "@reelsflow/domain";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ERROR_CLASS_LABELS } from "@/lib/labels";
 import { requireWorkspace } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
+import { loadContentAnalytics, resolvePeriod, type Period } from "@/lib/content-analytics";
 import { AccountBars, DailyColumns, type AccountRow, type Day } from "./charts";
+import { PeriodPicker, SyncNotice } from "./content-ui";
+import { ContentOverview, InsightsTab, RankingTab } from "./tabs";
 
 export const metadata: Metadata = { title: "Analytics" };
 
@@ -23,7 +26,6 @@ type Analytics = {
   failure_reasons: { reason: string; n: number }[];
 };
 
-const PERIODS = [7, 30, 90] as const;
 
 function fmtDelay(s: number | null) {
   if (s === null || s === undefined) return "—";
@@ -33,24 +35,76 @@ function fmtDelay(s: number | null) {
 }
 const pct = (v: number | null) => (v === null ? "—" : `${(v * 100).toFixed(1).replace(".", ",")}%`);
 
-export default async function AnalyticsPage({ params, searchParams }: { params: Promise<{ workspace: string }>; searchParams: Promise<{ days?: string }> }) {
+const TABS = [
+  { key: "overview", label: "Visão geral", icon: BarChart3 },
+  { key: "ranking", label: "Ranking de vídeos", icon: ListOrdered },
+  { key: "video", label: "Análise individual", icon: PlaySquare },
+  { key: "insights", label: "Insights com IA", icon: Lightbulb },
+] as const;
+type TabKey = (typeof TABS)[number]["key"];
+
+type Search = { days?: string; from?: string; to?: string; tab?: string; sort?: string; origin?: string; scope?: string };
+
+export default async function AnalyticsPage({ params, searchParams }: { params: Promise<{ workspace: string }>; searchParams: Promise<Search> }) {
   const { workspace: slug } = await params;
   const sp = await searchParams;
   const { workspace } = await requireWorkspace(slug);
-  const days = PERIODS.includes(Number(sp.days) as (typeof PERIODS)[number]) ? Number(sp.days) : 30;
   const tz = workspace.default_timezone;
-  const today = Temporal.Now.plainDateISO(tz);
-  const start = today.subtract({ days: days - 1 });
-  const from = start.toZonedDateTime({ timeZone: tz }).toInstant().toString();
-  const to = today.add({ days: 1 }).toZonedDateTime({ timeZone: tz }).toInstant().toString();
+  const period = resolvePeriod(tz, sp);
+  const tab: TabKey = TABS.some((t) => t.key === sp.tab) ? (sp.tab as TabKey) : "overview";
+  const base = `/w/${slug}/analytics`;
+  const periodQs: Record<string, string> = period.key === "custom" ? { from: period.fromDay, to: period.toDay } : { days: period.key };
+  const content = await loadContentAnalytics(workspace.id, period);
 
+  return (
+    <div className="mx-auto grid max-w-6xl gap-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Analytics</h1>
+          <p className="text-sm text-muted-foreground">Resultados reais dos conteúdos nas redes e desempenho operacional das publicações. Nada aqui é estimado.</p>
+        </div>
+        {tab !== "insights" && <PeriodPicker base={base} period={period} extra={{ tab, ...(sp.sort ? { sort: sp.sort } : {}), ...(sp.origin ? { origin: sp.origin } : {}) }} />}
+      </div>
+
+      <nav aria-label="Seções de analytics" className="flex flex-wrap gap-1 border-b">
+        {TABS.map(({ key, label, icon: Icon }) => (
+          <Link
+            key={key}
+            href={`${base}?${new URLSearchParams({ ...periodQs, tab: key }).toString()}`}
+            aria-current={key === tab ? "page" : undefined}
+            className={`-mb-px flex items-center gap-2 border-b-2 px-3 py-2 text-sm ${key === tab ? "border-primary font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          >
+            <Icon className="size-4" aria-hidden /> {label}
+          </Link>
+        ))}
+      </nav>
+
+      {tab !== "insights" && <SyncNotice sync={content.sync} slug={slug} />}
+
+      {tab === "overview" && (
+        <>
+          <ContentOverview slug={slug} tz={tz} period={period} data={content} />
+          <h2 className="mt-2 text-lg font-semibold">Operação das publicações</h2>
+          <OperationalSection workspaceId={workspace.id} tz={tz} period={period} />
+        </>
+      )}
+      {(tab === "ranking" || tab === "video") && (
+        <RankingTab slug={slug} tz={tz} period={period} data={content} sort={sp.sort} origin={sp.origin} scope={sp.scope} mode={tab} periodQs={periodQs} />
+      )}
+      {tab === "insights" && <InsightsTab />}
+    </div>
+  );
+}
+
+/** Indicadores operacionais (dados do próprio ReelsFlow) — mesmos de antes, agora no período escolhido. */
+async function OperationalSection({ workspaceId, tz, period }: { workspaceId: string; tz: string; period: Period }) {
   const supabase = await createClient();
-  const { data } = await supabase.rpc("publication_analytics", { p_workspace: workspace.id, p_from: from, p_to: to });
+  const { data } = await supabase.rpc("publication_analytics", { p_workspace: workspaceId, p_from: period.fromIso, p_to: period.toIso });
   const a = data as Analytics | null;
-
-  // Série completa de dias (inclui dias sem publicação).
+  const start = Temporal.PlainDate.from(period.fromDay);
+  const nDays = start.until(Temporal.PlainDate.from(period.toDay)).days + 1;
   const byDay = new Map((a?.by_day ?? []).map((d) => [d.day, d]));
-  const series: Day[] = Array.from({ length: days }, (_, i) => {
+  const series: Day[] = Array.from({ length: nDays }, (_, i) => {
     const d = start.add({ days: i }).toString();
     return byDay.get(d) ?? { day: d, published: 0, failed: 0, other: 0 };
   });
@@ -67,24 +121,8 @@ export default async function AnalyticsPage({ params, searchParams }: { params: 
   ];
 
   return (
-    <div className="mx-auto grid max-w-6xl gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Analytics</h1>
-          <p className="text-sm text-muted-foreground">Desempenho operacional das publicações, calculado com os dados do próprio ReelsFlow.</p>
-        </div>
-        <div className="flex rounded-md border p-0.5" role="group" aria-label="Período">
-          {PERIODS.map((p) => (
-            <Button key={p} asChild size="sm" variant={p === days ? "secondary" : "ghost"} className="h-8">
-              <Link href={`/w/${slug}/analytics?days=${p}`} aria-current={p === days}>
-                {p} dias
-              </Link>
-            </Button>
-          ))}
-        </div>
-      </div>
-
-      <section aria-label="Indicadores" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <>
+      <section aria-label="Indicadores operacionais" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {kpis.map((k) => (
           <Card key={k.label}>
             <CardHeader className="pb-1">
@@ -144,9 +182,6 @@ export default async function AnalyticsPage({ params, searchParams }: { params: 
         </div>
       )}
 
-      <p className="text-xs text-muted-foreground">
-        Métricas das redes (visualizações, curtidas, alcance) não estão disponíveis: exigem permissões de insights da Meta e aprovação no App Review. Nada aqui é estimado.
-      </p>
-    </div>
+    </>
   );
 }

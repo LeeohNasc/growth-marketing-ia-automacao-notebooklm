@@ -26,7 +26,7 @@ export default async function WorkspaceLayout({
       </a>
       <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r bg-sidebar lg:flex">
         <div className="flex h-14 items-center px-6">
-          <Logo href={`/w/${slug}/overview`} />
+          <Logo href={`/w/${slug}/overview`} label="ReelsFlow — visão geral do workspace" />
         </div>
         <div className="px-3 pb-3">
           <WorkspaceSwitcher current={current} workspaces={workspaces} />
@@ -38,6 +38,7 @@ export default async function WorkspaceLayout({
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/85 px-4 backdrop-blur sm:px-6">
           <MobileNav slug={slug} />
+          <Logo href={`/w/${slug}/overview`} variant="mark" label="ReelsFlow — visão geral do workspace" className="lg:hidden" />
           <span className="truncate text-sm font-medium lg:hidden">{workspace.name}</span>
           {workspace.is_demo && (
             <Badge variant="warning" title="Os dados deste workspace são demonstrativos">

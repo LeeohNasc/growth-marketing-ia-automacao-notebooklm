@@ -10,7 +10,8 @@ export const metadata: Metadata = { title: "Criar workspace" };
 
 const STEPS = ["Criar workspace", "Enviar vídeos", "Conectar redes sociais"];
 
-export default async function OnboardingPage() {
+export default async function OnboardingPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
+  const { next } = await searchParams;
   const user = await requireUser();
   const [profile, workspaces] = await Promise.all([getProfile(user.id), listMyWorkspaces(user.id)]);
   const first = workspaces.length === 0;
@@ -43,7 +44,7 @@ export default async function OnboardingPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <OnboardingForm defaultTimezone={profile?.default_timezone ?? DEFAULT_TIMEZONE} />
+              <OnboardingForm defaultTimezone={profile?.default_timezone ?? DEFAULT_TIMEZONE} next={next} />
             </CardContent>
           </Card>
         </div>

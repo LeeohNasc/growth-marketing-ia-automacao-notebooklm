@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Temporal } from "temporal-polyfill";
-import { CalendarClock, CheckCircle2, Film, Megaphone, TriangleAlert, Users } from "lucide-react";
-import { SOCIAL_PLATFORM_LABELS, type JobStatus, type SocialPlatform } from "@reelsflow/domain";
+import { BarChart3, CalendarClock, CheckCircle2, Film, Megaphone, TriangleAlert, Users } from "lucide-react";
+import { SOCIAL_PLATFORM_LABELS, periodTotal, rankPosts, type JobStatus, type SocialPlatform } from "@reelsflow/domain";
 import { JobStatusBadge } from "@/components/job-status";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { loadContentAnalytics, resolvePeriod } from "@/lib/content-analytics";
 import { listJobs } from "@/lib/jobs";
 import { NOTIFICATION_LABELS } from "@/lib/labels";
 import { requireWorkspace } from "@/lib/session";
@@ -45,6 +46,11 @@ export default async function OverviewPage({ params }: { params: Promise<{ works
     supabase.from("notifications").select("id, type, created_at, payload").eq("workspace_id", ws).eq("user_id", user.id).order("created_at", { ascending: false }).limit(6),
     supabase.rpc("worker_last_seen"),
   ]);
+  const perfPeriod = resolvePeriod(tz, { days: "7" });
+  const content = await loadContentAnalytics(ws, perfPeriod);
+  const contentGain = (["views", "likes", "comments", "shares"] as const).map((m) => ({ m, t: periodTotal(content.all, content.snapshots, m, perfPeriod.fromDay, perfPeriod.toDay) }));
+  const bestPost = rankPosts(content.all, "recent", { snapshots: content.snapshots, todayDay: perfPeriod.toDay })[0];
+  const scopeMissing = content.sync.some((x) => x.status === "needs_analytics_scope");
 
   const nextJob = next.items[0];
   const fmt = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: tz });
@@ -116,6 +122,57 @@ export default async function OverviewPage({ params }: { params: Promise<{ works
           </Link>
         ))}
       </section>
+
+
+      <Card aria-labelledby="perf-card-title">
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2 space-y-0">
+          <div>
+            <CardTitle id="perf-card-title" className="flex items-center gap-2 text-base">
+              <BarChart3 className="size-4" aria-hidden /> Desempenho dos Conteúdos
+            </CardTitle>
+            <CardDescription>
+              Últimos 7 dias · atualizado em {content.lastUpdate ? fmt.format(new Date(content.lastUpdate)) : "—"}
+            </CardDescription>
+          </div>
+          <Button asChild size="sm" variant="outline">
+            <Link href={`/w/${slug}/analytics`}>Ver análises completas</Link>
+          </Button>
+        </CardHeader>
+        <CardContent className="grid gap-3 text-sm">
+          {content.all.length === 0 ? (
+            <p className="text-muted-foreground">
+              {scopeMissing
+                ? "Métricas indisponíveis: a conexão da conta na Zernio ainda não inclui a permissão de métricas."
+                : "Ainda não há métricas sincronizadas. Nenhum número é estimado."}
+            </p>
+          ) : (
+            <>
+              <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {contentGain.map(({ m, t }) => (
+                  <div key={m}>
+                    <dt className="text-xs text-muted-foreground">{{ views: "Visualizações", likes: "Curtidas", comments: "Comentários", shares: "Compartilhamentos" }[m]}</dt>
+                    <dd className="text-xl font-semibold tabular-nums">
+                      {t.value === null ? <span className="text-sm font-normal text-muted-foreground" title="Sem histórico suficiente no período">Indisponível</span> : t.value.toLocaleString("pt-BR")}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="text-xs text-muted-foreground">
+                Ganho nos últimos 7 dias, somando todos os vídeos.
+                {bestPost && bestPost.value !== null ? (
+                  <>
+                    {" "}Melhor vídeo:{" "}
+                    <Link href={`/w/${slug}/analytics/videos/${bestPost.post.id}`} className="text-primary hover:underline">
+                      {bestPost.post.mediaName ?? "post publicado fora do ReelsFlow"}
+                    </Link>{" "}
+                    (+{bestPost.value.toLocaleString("pt-BR")} visualizações).
+                  </>
+                ) : null}
+              </p>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">

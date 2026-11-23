@@ -1,6 +1,6 @@
 "use server";
 import { redirect } from "next/navigation";
-import { createWorkspaceSchema, fieldErrors } from "@reelsflow/domain";
+import { createWorkspaceSchema, fieldErrors, safeRedirectPath } from "@reelsflow/domain";
 import { formValues, type ActionState } from "@/lib/action-state";
 import { createClient } from "@/lib/supabase/server";
 
@@ -18,5 +18,5 @@ export async function createWorkspaceAction(_prev: ActionState, formData: FormDa
         : "Não foi possível criar o workspace. Tente novamente.";
     return { message, values };
   }
-  redirect(`/w/${data.slug}/overview`);
+  redirect(safeRedirectPath(formData.get("next")?.toString(), `/w/${data.slug}/overview`));
 }

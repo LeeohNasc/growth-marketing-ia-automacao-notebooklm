@@ -69,7 +69,7 @@ describe("Instagram Login — banco", () => {
   });
 
   it("permissão de publicação não concedida fica registrada (reels_publish = false)", async () => {
-    await pool.query("insert into public.subscriptions (workspace_id, plan) values ($1, 'pro') on conflict (workspace_id) do update set plan = 'pro'", [ws]);
+    await pool.query("insert into public.subscriptions (workspace_id, plan) values ($1, 'agency') on conflict (workspace_id) do update set plan = 'agency'", [ws]);
     await connect(admin, await begin(admin), account("17841400000000002", "sem_publicar", ["instagram_business_basic"]));
     const caps = (
       await pool.query(

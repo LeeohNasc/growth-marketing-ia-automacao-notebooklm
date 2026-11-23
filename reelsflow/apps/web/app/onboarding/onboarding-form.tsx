@@ -5,11 +5,12 @@ import { TimezoneSelect } from "@/components/timezone-select";
 import { initialActionState } from "@/lib/action-state";
 import { createWorkspaceAction } from "./actions";
 
-export function OnboardingForm({ defaultTimezone }: { defaultTimezone: string }) {
+export function OnboardingForm({ defaultTimezone, next }: { defaultTimezone: string; next?: string }) {
   const [state, action] = useActionState(createWorkspaceAction, initialActionState);
   return (
     <form action={action} className="grid gap-4" noValidate>
       <FormMessage state={state} />
+      <input type="hidden" name="next" value={next ?? ""} />
       <Field
         label="Nome do workspace"
         name="name"
