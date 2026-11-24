@@ -31,3 +31,27 @@ Clique → conteúdo utilizável (ms). Resposta visual ao clique: produção 104
 Rede lenta: mesmo padrão (Calendário 242 → 318 → 210; Fila 189 → 316 → 194; Visão Geral 188 → 316 → 184).
 Causa das regressões: o React segura a revelação do conteúdo por ~300 ms depois de mostrar um estado de
 carregamento; em gru1 essas páginas ficaram rápidas o bastante para o esqueleto atrasar o conteúdo.
+
+## Ajuste: conjunto A sem os 5 esqueletos — commit `12d1009`
+Removidos os 5 `loading.tsx` e o componente `page-skeleton` (sem uso). Demais otimizações preservadas; conjunto B
+ausente. Prévia protegida em gru1: `dpl_FJonTcvBEpRhbeubZzcVWDQH1NpK` (`reelsflow-9cw7yulix-leeohnasc.vercel.app`).
+
+Testes: lint, typecheck (5 pacotes), build ok · unitários 147/147 · e2e 64/64 · `security.cjs` 0 falhas
+(getUser +2 s: revogada → redirecionamento após 2.044 ms sem dados; válida → dados após 2.258 ms) ·
+`ux.cjs` 10/10 · `remote-readonly.cjs` prévia e produção sem falhas, 0 erros de console (desktop/celular).
+
+Chave de serviço: lida só em `lib/supabase/admin.ts` (`server-only`; regra de lint proíbe outros usos); na Vercel
+só no alvo *preview*, tipo sensível. Build com valor-sentinela: 0 de 49 arquivos do cliente contêm a chave
+(controle: chave publicável encontrada). O projeto Supabase a que pertence não pode ser confirmado sem ler o valor.
+
+Medição local (18 ms/consulta, mesmos dados, mesma máquina), clique → conteúdo utilizável (ms):
+| Página | Produção | Ajustado | | Rede lenta: Produção | Ajustado |
+|---|---|---|---|---|---|
+| Biblioteca | 279 | 195 | | 282 | 248 |
+| Calendário | 267 | 161 | | 287 | 210 |
+| Campanhas | 135 | 90 | | 171 | 179 |
+| Fila | 185 | 142 | | 201 | 203 |
+| Configurações | 202 | 112 | | 204 | 187 |
+| Criar publicação | 123 | 74 | | 172 | 172 |
+| Visão Geral | 213 | 154 | | 203 | 191 |
+Resposta visual ao clique: produção 123–253 → ajustado 2–4 ms.
