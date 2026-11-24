@@ -201,3 +201,16 @@ deploy futuro autorizado; o worktree limpo do passo 1 já os exclui.
 
 Conclusão: observação de 24 h **aprovada**, sem regressão, duplicidade ou perda de dados. A Etapa 1 só fica
 totalmente validada após o teste real de publicação (autorização separada: 7 vídeos, horário, custo da Zernio).
+
+## Migração da Vercel para gru1 — 24/11/2026 (UTC)
+| Hora | Passo | Resultado |
+|---|---|---|
+| 03:23 | pré-deploy | produção `dpl_Dw6UZ7` (iad1, commit `0356e74`, árvore limpa); 3 variáveis de produção inalteradas desde 20/11; 0 respostas 5xx em 24 h; linha de base registrada |
+| 03:24 | deploy sem domínio | `dpl_W8BHG55Hd9ymhZ1diZ7MjFy43Qjb` (gru1, `0356e74`, de worktree limpo); código do app idêntico (só arquivos de teste não versionados a menos) |
+| 03:25 | testes sem login | 7 rotas protegidas → login; cabeçalhos de segurança idênticos; consulta de leitura ao Supabase ok; 0 erros de console (desktop/celular) |
+| 03:26:44 | promoção | via API (a CLI falhou por escopo de time, sem efeito); domínio em gru1 em 12 s |
+| 03:27–04:04 | 30 min | 0 erros 5xx; worker/agendador 0 falhas; 0 alertas; Zernio saudável; assinaturas idênticas; rota com consulta ao banco 580 → ~315 ms (medido dos EUA) |
+| 04:07 | região padrão do projeto | iad1 → gru1 (só `serverlessFunctionRegion`/`functionDefaultRegions`); nenhum deploy novo; projeto sem Git/gatilhos |
+| 04:11–04:18 | teste autenticado manual (usuário) | **aprovado pelo usuário**; registros: 1 login, 17 páginas, 128 chamadas do servidor todas via São Paulo, 0 erros, **mediana 18 ms por consulta ao banco** (antes, de iad1: 370–450 ms) |
+
+Rollback: promover `dpl_Dw6UZ7FpiXJxY3Gf6UQ6L9Dmxdqk` (iad1) e voltar a região padrão do projeto para iad1.
