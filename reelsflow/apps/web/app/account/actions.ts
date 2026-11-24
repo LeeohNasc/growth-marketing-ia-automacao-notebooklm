@@ -5,6 +5,7 @@ import { deleteAccountSchema, fieldErrors, updateProfileSchema } from "@reelsflo
 import { formValues, type ActionState } from "@/lib/action-state";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { SESSION_ENDED_PATH } from "@/lib/session";
 
 export async function updateProfileAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const values = formValues(formData, ["displayName", "timezone"]);
@@ -13,7 +14,7 @@ export async function updateProfileAction(_prev: ActionState, formData: FormData
 
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) redirect("/login");
+  if (!auth.user) redirect(SESSION_ENDED_PATH);
   const { data, error } = await supabase
     .from("profiles")
     .update({ display_name: parsed.data.displayName, default_timezone: parsed.data.timezone })
@@ -27,7 +28,7 @@ export async function updateProfileAction(_prev: ActionState, formData: FormData
 export async function deleteAccountAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user?.email) redirect("/login");
+  if (!auth.user?.email) redirect(SESSION_ENDED_PATH);
 
   const parsed = deleteAccountSchema(auth.user.email).safeParse({ confirmEmail: formData.get("confirmEmail") });
   if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error) };

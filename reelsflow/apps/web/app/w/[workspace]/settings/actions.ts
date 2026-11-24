@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { fieldErrors, updateWorkspaceSchema } from "@reelsflow/domain";
 import { formValues, type ActionState } from "@/lib/action-state";
 import { createClient } from "@/lib/supabase/server";
+import { SESSION_ENDED_PATH } from "@/lib/session";
 
 export async function updateWorkspaceAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const values = formValues(formData, ["name", "timezone"]);
@@ -43,7 +44,7 @@ export async function leaveWorkspaceAction(_prev: ActionState, formData: FormDat
   const id = String(formData.get("workspaceId") ?? "");
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) redirect("/login");
+  if (!auth.user) redirect(SESSION_ENDED_PATH);
   const { data, error } = await supabase
     .from("workspace_members")
     .delete()

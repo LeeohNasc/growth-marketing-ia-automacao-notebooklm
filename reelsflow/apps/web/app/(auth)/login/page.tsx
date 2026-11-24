@@ -9,6 +9,7 @@ const NOTICES: Record<string, { text: string; variant: "success" | "destructive"
   "password-updated": { text: "Senha atualizada. Entre com a nova senha.", variant: "success" },
   "account-deleted": { text: "Sua conta foi excluída.", variant: "success" },
   "link-invalid": { text: "O link é inválido ou expirou. Solicite um novo.", variant: "destructive" },
+  "session-ended": { text: "Sua sessão foi encerrada (por exemplo, ao sair em outro dispositivo). Entre novamente.", variant: "destructive" },
 };
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; notice?: string }> }) {

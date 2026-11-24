@@ -15,9 +15,17 @@ export const getCurrentUser = cache(async () => {
   return data.user;
 });
 
+/**
+ * Destino quando há cookie de sessão mas o Auth não confirma o usuário (sessão revogada em outro
+ * dispositivo, usuário bloqueado/excluído). Ir direto para /login criaria um ciclo, porque o proxy
+ * ainda considera o JWT válido; esta rota limpa a sessão local com segurança. Ver
+ * app/auth/session-ended/route.ts.
+ */
+export const SESSION_ENDED_PATH = "/auth/session-ended";
+
 export async function requireUser() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect(SESSION_ENDED_PATH);
   return user;
 }
 
@@ -86,7 +94,7 @@ export const requireWorkspace = cache(async (slug: string) => {
       .eq("workspace_members.user_id", userId)
       .maybeSingle(),
   ]);
-  if (!user || user.id !== userId) redirect("/login");
+  if (!user || user.id !== userId) redirect(SESSION_ENDED_PATH);
   if (!row) notFound();
   const { workspace_members: members, ...workspace } = row;
   const role = members[0]?.role;

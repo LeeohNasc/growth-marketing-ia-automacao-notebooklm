@@ -8,6 +8,7 @@ import {
 import { instagramConfig, instagramGraph } from "@/lib/instagram";
 import { tokenCipher } from "@/lib/meta";
 import { createClient } from "@/lib/supabase/server";
+import { SESSION_ENDED_PATH } from "@/lib/session";
 
 /**
  * Retorno do Instagram Login:
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
   const go = (path: string) => NextResponse.redirect(new URL(path, origin));
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return go("/login");
+  if (!auth.user) return go(SESSION_ENDED_PATH);
 
   const state = searchParams.get("state") ?? "";
   const code = searchParams.get("code");
