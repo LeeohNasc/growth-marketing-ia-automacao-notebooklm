@@ -145,7 +145,7 @@ Medição: 525 execuções do agendador (`reelsflow-worker-tick`), 0 falhas; 525
 | Minuto (UTC) | O que os registros mostram | Causa | Efeito |
 |---|---|---|---|
 | 07:20 | sem linha no log de borda da função, mas pg_net registrou **202** e o worker registrou `booted` + `tick done` | falha só no registro de log da borda (a chamada aconteceu) | nenhum |
-| 08:40 | cron `succeeded` (apenas enfileira); pg_net: **timeout de 5 s inteiramente na resolução de DNS**, 0 ms de conexão; a função não recebeu chamada | falha transitória de DNS na rede do Supabase (pg_net), fora do código do ReelsFlow | 1 ciclo pulado; o das 08:41 rodou normalmente |
+| 08:40 | pg_net: **timeout de 5 s** (DNS lento, ~4 s); mesmo assim a chamada chegou: worker `booted` 08:40:05,08 e `tick done` 08:40:05,93; faltou só a linha do log de borda | DNS lento na rede do Supabase; o pg_net desistiu de esperar a resposta | nenhum — ciclo executado (≈ 4 s atrasado). **Correção** do registro anterior, que dizia "1 ciclo pulado" |
 
 Por que um ciclo pulado não gera duplicata nem perda: o worker é sem estado entre ciclos; publicações vencidas
 são reivindicadas no ciclo seguinte (tolerância de atraso de 120 min) e a idempotência na Zernio impede
@@ -186,3 +186,18 @@ anterior — que será exatamente o `dpl_Dw6UZ7`. Banco, worker e Zernio não mu
 **Pendência registrada (não alterada):** o envio do CLI inclui arquivos não versionados
 (`apps/web/e2e-render/samples/`, fixtures). Não afetam o app, mas convém incluí-los no `.vercelignore` num
 deploy futuro autorizado; o worktree limpo do passo 1 já os exclui.
+
+## Encerramento da observação de 24 h — 24/11/2026 03:18 UTC
+| Verificação | Resultado |
+|---|---|
+| Worker (02:51 de 23/11 → 02:51 de 24/11) | **1.440 `tick done` em 1.440 minutos**, 0 `tick failed`, 0 erros; último sinal há < 1 min |
+| Agendador | 1.498 execuções do worker desde 02:20 de 23/11, **0 falhas** em todos os jobs; vigia 300 execuções; limpeza 03:17 ok nos dois dias |
+| Chamadas HTTP retidas (últimas 6 h) | 360, 0 falhas |
+| Lacunas no log de borda | 4 minutos (07:20, 08:40, 14:01, 01:14) — nos 4 o worker registrou `booted` + `tick done`: perda só da linha de log |
+| `ops_alerts` | 0 |
+| Dados | assinaturas idênticas à referência nas 8 tabelas; 1 tentativa, 1 publicação externa, nenhum job pendente; nenhuma notificação nova; usuários = 3 |
+| Zernio | conta @pipocoumemes `active` / `healthy` (checagem 03:15) |
+| Site | `reelsflow-xi.vercel.app` 200, rotas protegidas → login; produção = `dpl_Dw6UZ7…` (iad1) |
+
+Conclusão: observação de 24 h **aprovada**, sem regressão, duplicidade ou perda de dados. A Etapa 1 só fica
+totalmente validada após o teste real de publicação (autorização separada: 7 vídeos, horário, custo da Zernio).
