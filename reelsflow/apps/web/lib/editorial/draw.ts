@@ -185,6 +185,10 @@ function drawReelsOverlay(ctx: Ctx, l: CardLayout): void {
   ctx.fillStyle = "rgba(220, 38, 38, 0.18)";
   ctx.fillRect(0, 0, 96 * k, l.height);
   ctx.fillRect(l.width - 96 * k, 0, 96 * k, l.height);
+  // Faixas de risco (margens aprovadas: 285 px em cima, 400 px embaixo) — onde a interface pode cobrir.
+  ctx.fillStyle = "rgba(220, 38, 38, 0.14)";
+  ctx.fillRect(96 * k, 0, l.width - 192 * k, 285 * k);
+  ctx.fillRect(96 * k, l.height - 400 * k, l.width - 192 * k, 400 * k);
   // Topo (abas) e base (barra do app).
   ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
   ctx.fillRect(0, 0, l.width, 188 * k);
@@ -214,10 +218,22 @@ function drawReelsOverlay(ctx: Ctx, l: CardLayout): void {
   ctx.fillText("nome_do_perfil  •  Seguir", 227 * k, 1596 * k);
   ctx.font = `400 ${Math.round(32 * k)}px ${font}`;
   ctx.fillText("Legenda do post aparece aqui…", 129 * k, 1675 * k);
+  // Referência central 1080×1350 (285 px acima e abaixo).
+  ctx.setLineDash([18 * k, 10 * k]);
+  ctx.strokeStyle = "rgba(14, 165, 233, 0.95)";
+  ctx.lineWidth = 3 * k;
+  ctx.strokeRect(1.5 * k, 285 * k, l.width - 3 * k, 1350 * k);
+  ctx.setLineDash([]);
+  ctx.font = `600 ${Math.round(24 * k)}px ${font}`;
+  ctx.textAlign = "left";
+  ctx.fillStyle = "rgba(14, 165, 233, 1)";
+  ctx.fillText("Referência central 1080×1350 (tracejado azul)", 110 * k, 170 * k);
   // Rótulo.
   ctx.font = `600 ${Math.round(26 * k)}px ${font}`;
   ctx.textAlign = "center";
   ctx.fillStyle = "#FFFFFF";
-  ctx.fillText("Simulação aproximada do Instagram — não sai no arquivo final", l.width / 2, 1830 * k);
+  ctx.fillText("Simulação aproximada do Instagram — não sai no arquivo final", l.width / 2, 1810 * k);
+  ctx.font = `400 ${Math.round(22 * k)}px ${font}`;
+  ctx.fillText("Vermelho: faixas de risco · Azul: referência 1080×1350 · Rosa: área segura do card", l.width / 2, 1850 * k);
   ctx.restore();
 }

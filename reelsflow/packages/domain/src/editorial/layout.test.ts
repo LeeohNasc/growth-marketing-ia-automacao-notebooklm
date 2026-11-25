@@ -193,9 +193,9 @@ describe("vertical v2 — área segura dos Reels", () => {
     expect(y + h).toBeLessThanOrEqual(1920 - S.bottom);
   };
 
-  it("avatar, nome, @ e manchete ficam dentro de 120/250/400", () => {
+  it("avatar, nome, @ e manchete ficam dentro de 120/285/400", () => {
     const l = computeCardLayout(v({ templateVersion: 2 }), {}, measure);
-    expect(l.safeArea).toEqual({ x: 120, y: 250, w: 840, h: 1270 });
+    expect(l.safeArea).toEqual({ x: 120, y: 285, w: 840, h: 1235 });
     inside(l.avatar.x, l.avatar.y, l.avatar.w, l.avatar.h);
     for (const r of [l.name, l.username, ...l.headline.lines]) {
       const size = Number(/(\d+)px/.exec(r.font)![1]);
@@ -243,6 +243,20 @@ describe("vertical v2 — área segura dos Reels", () => {
     expect(a).toEqual(b);
     expect(a.avatar.x).toBe(48);
     expect(a.badge).toBeNull();
+  });
+
+  it("enquadramento: o layout não troca o modo escolhido e o vídeo 9:16 continua visível", () => {
+    const style = { watermark: { kind: "username" as const, position: "bottom-right" as const, opacity: 0.9 } };
+    const cover = computeCardLayout(v({ templateVersion: 2, fit: "cover" }), style, measure);
+    const contain = computeCardLayout(v({ templateVersion: 2, fit: "contain" }), style, measure);
+    expect(contain).toEqual(cover); // o modo só muda o desenho da mídia (escolha do usuário), nunca a geometria
+    const src = { width: 1080, height: 1920 };
+    const c = fitMedia(src, cover.media, "cover");
+    expect(c.sw).toBe(1080); // largura inteira do vídeo original
+    expect(c.sh / 1920).toBeGreaterThan(0.5); // "Preencher": mais da metade da altura original visível
+    const k = fitMedia(src, cover.media, "contain");
+    expect([k.sw, k.sh]).toEqual([1080, 1920]); // "Mostrar tudo": vídeo inteiro, sem corte
+    expect(k.dw).toBeGreaterThan(540); // e ainda com mais da metade da largura do card
   });
 
   it("v2 não altera feed nem quadrado", () => {

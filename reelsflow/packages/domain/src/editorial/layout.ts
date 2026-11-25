@@ -25,7 +25,7 @@ export const EDITORIAL_TEMPLATE_VERSION = 2;
  * cada lateral num iPhone), sobrepõe abas no topo, a coluna de botões à direita e perfil/legenda/barra na base.
  * `rightRail`: distância mínima da borda direita para o que fica na metade inferior (coluna de botões).
  */
-export const REELS_SAFE_AREA = { side: 120, top: 250, bottom: 400, rightRail: 220 } as const;
+export const REELS_SAFE_AREA = { side: 120, top: 285, bottom: 400, rightRail: 220 } as const;
 
 export const CARD_FORMATS = {
   feed: { width: 1080, height: 1350, label: "Feed 4:5 (1080×1350)" },

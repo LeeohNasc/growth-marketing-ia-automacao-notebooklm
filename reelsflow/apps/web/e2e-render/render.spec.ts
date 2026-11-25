@@ -227,7 +227,7 @@ test.describe("vertical v2 — área segura dos Reels", () => {
     execFileSync("ffmpeg", ["-y", "-v", "error", "-ss", "0.5", "-i", f, "-frames:v", "1", frame]);
     const png = readFileSync(frame).toString("base64");
     const l = await rf(page, "layout", cfg);
-    const S = { x0: 120, y0: 250, x1: 960, y1: 1520 };
+    const S = { x0: 120, y0: 285, x1: 960, y1: 1520 };
     const within = (r: Rect) => r.x >= S.x0 && r.x + r.w <= S.x1 && r.y >= S.y0 && r.y + r.h <= S.y1;
     expect(within(l.avatar)).toBe(true);
     expect(within(l.badge!)).toBe(true);
