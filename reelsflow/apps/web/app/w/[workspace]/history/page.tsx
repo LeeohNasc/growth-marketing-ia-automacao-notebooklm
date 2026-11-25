@@ -4,11 +4,12 @@ import { SOCIAL_PLATFORM_LABELS, type JobStatus, type SocialPlatform } from "@re
 import { JobStatusBadge } from "@/components/job-status";
 import { Button } from "@/components/ui/button";
 import { listJobs } from "@/lib/jobs";
-import { ERROR_CLASS_LABELS } from "@/lib/labels";
+import { ERROR_CLASS_LABELS, friendlyError } from "@/lib/labels";
+import { TechDetails } from "@/components/tech-details";
 import { requireWorkspace } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 
-export const metadata: Metadata = { title: "Histórico" };
+export const metadata: Metadata = { title: "Publicadas" };
 const PAGE = 50;
 
 export default async function HistoryPage({ params, searchParams }: { params: Promise<{ workspace: string }>; searchParams: Promise<{ page?: string; show?: string; account?: string }> }) {
@@ -30,8 +31,8 @@ export default async function HistoryPage({ params, searchParams }: { params: Pr
     <div className="mx-auto grid max-w-6xl gap-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Histórico</h1>
-          <p className="text-sm text-muted-foreground">Publicações concluídas e falhas definitivas. Registros são mantidos mesmo se o vídeo for excluído.</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Publicadas</h1>
+          <p className="text-sm text-muted-foreground">O que já saiu e o que não foi possível publicar. O registro continua aqui mesmo se o vídeo for excluído.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <form action={`/w/${slug}/history`} className="flex items-center gap-2">
@@ -107,7 +108,15 @@ export default async function HistoryPage({ params, searchParams }: { params: Pr
                         ID {j.externalId}
                       </span>
                     ) : j.last_error_class ? (
-                      <span title={j.last_error_message ?? ""}>{ERROR_CLASS_LABELS[j.last_error_class] ?? j.last_error_class}{j.last_error_message ? `: ${j.last_error_message}` : ""}</span>
+                      <div className="grid gap-1">
+                        <span>{friendlyError(j.last_error_class)}</span>
+                        <TechDetails>
+                          <span>
+                            {ERROR_CLASS_LABELS[j.last_error_class] ?? j.last_error_class}
+                            {j.last_error_message ? `: ${j.last_error_message}` : ""}
+                          </span>
+                        </TechDetails>
+                      </div>
                     ) : (
                       "—"
                     )}

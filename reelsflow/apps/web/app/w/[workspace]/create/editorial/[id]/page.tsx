@@ -32,6 +32,18 @@ export default async function EditorialCardPage({ params }: { params: Promise<{ 
     const { data: m } = await supabase.from("media_assets").select("storage_path, status").eq("id", card.rendered_media_id).maybeSingle();
     if (m?.status === "ready") renderedUrl = (await supabase.storage.from("media").createSignedUrl(m.storage_path, 600)).data?.signedUrl ?? null;
   }
+  // Vídeos prontos da Biblioteca para usar no card sem reenviar (exclui arquivos gerados por outros cards).
+  const { data: libraryVideos } = await supabase
+    .from("media_assets")
+    .select("id, name, storage_path, duration_ms, size_bytes")
+    .eq("workspace_id", workspace.id)
+    .eq("status", "ready")
+    .eq("kind", "video")
+    .is("deleted_at", null)
+    .is("source_card_id", null)
+    .lte("size_bytes", 50 * 1024 * 1024) // limite de origem do card
+    .order("created_at", { ascending: false })
+    .limit(200);
   const { data: accounts } = await supabase
     .from("social_accounts")
     .select("id, display_name, platform, provider, settings")
@@ -68,6 +80,7 @@ export default async function EditorialCardPage({ params }: { params: Promise<{ 
           provider: a.provider,
         }))}
         renderedUrl={renderedUrl}
+        libraryVideos={libraryVideos ?? []}
       />
       </div>
     </div>

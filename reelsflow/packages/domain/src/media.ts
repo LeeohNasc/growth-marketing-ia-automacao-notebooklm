@@ -355,6 +355,20 @@ export function normalizeHashtags(input: string): string[] {
   return out;
 }
 
+/** Hashtags que já estão escritas no texto da legenda (ex.: "...reunião #memes #Humor" → ["#memes", "#Humor"]). */
+export function hashtagsInText(text: string): string[] {
+  return normalizeHashtags((text.match(/#[\p{L}\p{N}_]+/gu) ?? []).join(" "));
+}
+
+/**
+ * Hashtags do campo separado que AINDA NÃO estão na legenda (comparação sem diferenciar maiúsculas).
+ * Usado ao salvar uma edição: evita "#memes" duas vezes no texto publicado.
+ */
+export function extraHashtags(caption: string, tags: string[]): string[] {
+  const inText = new Set(hashtagsInText(caption).map((t) => t.toLowerCase()));
+  return tags.filter((t) => !inText.has(t.toLowerCase()));
+}
+
 export const MEDIA_STATUS_LABELS = {
   uploading: "Enviando",
   uploaded: "Na fila de análise",

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { TechDetails } from "@/components/tech-details";
 import Link from "next/link";
 import { Temporal } from "temporal-polyfill";
 import { SOCIAL_PLATFORM_LABELS } from "@reelsflow/domain";
@@ -9,7 +10,7 @@ import { requireWorkspace } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { AccountBars, DailyColumns, type AccountRow, type Day } from "./charts";
 
-export const metadata: Metadata = { title: "Analytics" };
+export const metadata: Metadata = { title: "Resultados" };
 
 type Analytics = {
   published: number;
@@ -60,18 +61,21 @@ export default async function AnalyticsPage({ params, searchParams }: { params: 
   const kpis = [
     { label: "Publicadas", value: (a?.published ?? 0).toLocaleString("pt-BR") },
     { label: "Taxa de sucesso", value: pct(successRate), hint: "publicadas ÷ (publicadas + falhas definitivas)" },
+    { label: "Não publicadas", value: (a?.failed ?? 0).toLocaleString("pt-BR"), hint: "falharam mesmo depois das novas tentativas" },
+  ];
+  // Indicadores de operação: úteis para diagnóstico, não para decidir conteúdo.
+  const techKpis = [
     { label: "Sucesso na 1ª tentativa", value: pct(a?.first_attempt_rate ?? null) },
-    { label: "Atraso mediano", value: fmtDelay(a?.delay_p50_s ?? null), hint: "horário efetivo − previsto" },
+    { label: "Atraso mediano (efetivo − previsto)", value: fmtDelay(a?.delay_p50_s ?? null) },
     { label: "Atraso p95", value: fmtDelay(a?.delay_p95_s ?? null) },
-    { label: "Falhas definitivas", value: (a?.failed ?? 0).toLocaleString("pt-BR") },
   ];
 
   return (
     <div className="mx-auto grid max-w-6xl gap-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Analytics</h1>
-          <p className="text-sm text-muted-foreground">Desempenho operacional das publicações, calculado com os dados do próprio ReelsFlow.</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Resultados</h1>
+          <p className="text-sm text-muted-foreground">Quantas publicações saíram, quando e por conta (dados do próprio ReelsFlow). Visualizações, curtidas e comentários ainda não estão disponíveis.</p>
         </div>
         <div className="flex rounded-md border p-0.5" role="group" aria-label="Período">
           {PERIODS.map((p) => (
@@ -97,6 +101,13 @@ export default async function AnalyticsPage({ params, searchParams }: { params: 
           </Card>
         ))}
       </section>
+      <TechDetails label="Indicadores técnicos">
+        {techKpis.map((k) => (
+          <span key={k.label}>
+            {k.label}: <strong className="tabular-nums text-foreground">{k.value}</strong>
+          </span>
+        ))}
+      </TechDetails>
 
       {finished === 0 && (a?.by_day.length ?? 0) === 0 ? (
         <p className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">Nenhuma publicação prevista neste período.</p>

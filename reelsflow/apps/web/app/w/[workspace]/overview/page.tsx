@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Temporal } from "temporal-polyfill";
-import { CalendarClock, CheckCircle2, Film, Megaphone, TriangleAlert, Users } from "lucide-react";
-import { SOCIAL_PLATFORM_LABELS, type JobStatus, type SocialPlatform } from "@reelsflow/domain";
+import { CalendarClock, CheckCircle2, Film, Megaphone, SquarePen, TriangleAlert, Users } from "lucide-react";
+import { SOCIAL_PLATFORM_LABELS, can, type JobStatus, type SocialPlatform } from "@reelsflow/domain";
 import { JobStatusBadge } from "@/components/job-status";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +13,7 @@ import { NOTIFICATION_LABELS } from "@/lib/labels";
 import { requireWorkspace } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 
-export const metadata: Metadata = { title: "Visão Geral" };
+export const metadata: Metadata = { title: "Início" };
 
 /** Worker sem sinal há mais de 5 minutos. */
 function isStale(lastSeen: string | null): boolean {
@@ -22,7 +22,7 @@ function isStale(lastSeen: string | null): boolean {
 
 export default async function OverviewPage({ params }: { params: Promise<{ workspace: string }> }) {
   const { workspace: slug } = await params;
-  const { user, workspace } = await requireWorkspace(slug);
+  const { user, workspace, role } = await requireWorkspace(slug);
   const supabase = await createClient();
   const tz = workspace.default_timezone;
   const ws = workspace.id;
@@ -70,12 +70,21 @@ export default async function OverviewPage({ params }: { params: Promise<{ works
     <div className="mx-auto grid max-w-6xl gap-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Visão Geral</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Início</h1>
           <p className="text-sm text-muted-foreground">
             {workspace.name} · fuso {tz.replaceAll("_", " ")}
           </p>
         </div>
-        {workspace.queue_paused && <Badge variant="warning">Fila pausada</Badge>}
+        <div className="flex items-center gap-2">
+          {workspace.queue_paused && <Badge variant="warning">Fila pausada</Badge>}
+          {can(role, "editContent") && (
+            <Button asChild>
+              <Link href={`/w/${slug}/create`}>
+                <SquarePen /> Criar publicação
+              </Link>
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-2">
@@ -96,7 +105,7 @@ export default async function OverviewPage({ params }: { params: Promise<{ works
           <Alert variant="warning">
             {review.count} publicação(ões) precisam de revisão.{" "}
             <Link href={`/w/${slug}/queue?group=problems`} className="underline">
-              Ver na fila
+              Ver na lista
             </Link>
           </Alert>
         )}
@@ -138,7 +147,7 @@ export default async function OverviewPage({ params }: { params: Promise<{ works
                 <p>Nenhuma publicação agendada.</p>
                 <div className="flex flex-wrap gap-2">
                   <Button asChild size="sm">
-                    <Link href={`/w/${slug}/upload`}>Enviar vídeos</Link>
+                    <Link href={`/w/${slug}/library?enviar=1`}>Enviar vídeos</Link>
                   </Button>
                   <Button asChild size="sm" variant="outline">
                     <Link href={`/w/${slug}/campaigns/new`}>Criar campanha</Link>

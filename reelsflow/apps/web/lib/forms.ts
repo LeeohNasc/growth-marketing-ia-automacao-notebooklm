@@ -1,16 +1,18 @@
-import { normalizeHashtags, scheduleRuleSchema, timezoneSchema } from "@reelsflow/domain";
+import { extraHashtags, normalizeHashtags, scheduleRuleSchema, timezoneSchema } from "@reelsflow/domain";
 import { z } from "zod";
 
 /** Lê os campos de ScheduleFields/ContentFields de um FormData. */
 export function readScheduleForm(formData: FormData) {
+  const caption = String(formData.get("caption") ?? "").trim();
   return {
     timezone: String(formData.get("timezone") ?? ""),
     weekdays: formData.getAll("weekdays").map(Number),
     times: formData.getAll("times").map(String),
     orderStrategy: String(formData.get("order_strategy") ?? "upload"),
     maxLatenessMinutes: Number(formData.get("max_lateness_minutes") ?? 120),
-    caption: String(formData.get("caption") ?? "").trim(),
-    hashtags: normalizeHashtags(String(formData.get("hashtags") ?? "")),
+    caption,
+    // Hashtags já escritas na legenda não são repetidas no campo separado.
+    hashtags: extraHashtags(caption, normalizeHashtags(String(formData.get("hashtags") ?? ""))),
   };
 }
 

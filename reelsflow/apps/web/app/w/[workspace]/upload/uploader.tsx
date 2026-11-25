@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import * as tus from "tus-js-client";
 import { CheckCircle2, CircleAlert, Copy, Loader2, RotateCcw, UploadCloud, X } from "lucide-react";
@@ -66,7 +67,9 @@ const STATUS_LABEL: Record<Status, string> = {
   cancelled: "Cancelado",
 };
 
-export function Uploader({ workspaceId, slug, maxBytes }: { workspaceId: string; slug: string; maxBytes: number }) {
+/** `embedded`: dentro da Biblioteca — ao terminar, a lista da própria página é atualizada (sem trocar de tela). */
+export function Uploader({ workspaceId, slug, maxBytes, embedded = false }: { workspaceId: string; slug: string; maxBytes: number; embedded?: boolean }) {
+  const router = useRouter();
   const [items, dispatch] = useReducer(reducer, []);
   const [dragging, setDragging] = useState(false);
   const files = useRef(new Map<string, File>());
@@ -334,11 +337,15 @@ export function Uploader({ workspaceId, slug, maxBytes }: { workspaceId: string;
               {counts.done} de {counts.total} enviados{counts.error ? ` · ${counts.error} com falha` : ""}
             </span>
             <div className="ml-auto flex gap-2">
-              {!busy && counts.done > 0 && (
+              {!busy && counts.done > 0 && (embedded ? (
+                <Button size="sm" onClick={() => router.refresh()}>
+                  Atualizar a lista
+                </Button>
+              ) : (
                 <Button asChild size="sm">
                   <Link href={`/w/${slug}/library`}>Ver na biblioteca</Link>
                 </Button>
-              )}
+              ))}
               <Button size="sm" variant="outline" onClick={() => dispatch({ type: "clearFinished" })}>
                 Limpar concluídos
               </Button>

@@ -69,6 +69,19 @@ export async function uploadSource(supabase: SupabaseClient, workspaceId: string
   return path;
 }
 
+/**
+ * Usa um vídeo que já está na Biblioteca como origem do card: o arquivo é COPIADO dentro do armazenamento
+ * (nada é reenviado do aparelho). Se a cópia não for permitida, cai no envio normal do arquivo já baixado.
+ */
+export async function copySource(supabase: SupabaseClient, workspaceId: string, cardId: string, src: LoadedSource, fromPath: string): Promise<string> {
+  const path = `${workspaceId}/cards/${cardId}/${src.kind}-${crypto.randomUUID().slice(0, 12)}.${EXT[src.type]}`;
+  if (fromPath.startsWith(`${workspaceId}/`)) {
+    const { error } = await supabase.storage.from("media").copy(fromPath, path);
+    if (!error) return path;
+  }
+  return uploadSource(supabase, workspaceId, cardId, src);
+}
+
 /** Baixa uma origem já salva (URL assinada de curta duração) como Blob — sem "contaminar" o canvas. */
 export async function fetchSource(kind: SourceKind, url: string): Promise<LoadedSource> {
   const res = await fetch(url);

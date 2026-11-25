@@ -1,7 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { fieldErrors, normalizeHashtags, scheduleRuleSchema } from "@reelsflow/domain";
+import { extraHashtags, fieldErrors, normalizeHashtags, scheduleRuleSchema } from "@reelsflow/domain";
 import { z } from "zod";
 import type { ActionState } from "@/lib/action-state";
 import { readScheduleForm } from "@/lib/forms";
@@ -235,7 +235,7 @@ export async function moveCampaignMediaAction(slug: string, campaignId: string, 
 export async function setMediaCaptionAction(slug: string, campaignId: string, campaignMediaId: string, caption: string, hashtags: string): Promise<Result> {
   const { workspace } = await requireWorkspace(slug);
   const supabase = await createClient();
-  const tags = normalizeHashtags(hashtags);
+  const tags = extraHashtags(caption, normalizeHashtags(hashtags));
   const { data, error } = await supabase
     .from("campaign_media")
     .update({ caption_override: caption.trim().slice(0, 2200) || null, hashtags_override: tags.length ? tags : null })

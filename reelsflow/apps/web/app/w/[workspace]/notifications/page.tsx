@@ -8,7 +8,7 @@ import { EMAIL_NOTIFICATION_TYPES, NOTIFICATION_LABELS as TYPE_LABELS } from "@/
 import { cn } from "@/lib/utils";
 import { markAllReadAction, savePreferencesAction } from "./actions";
 
-export const metadata: Metadata = { title: "Notificações" };
+export const metadata: Metadata = { title: "Avisos" };
 
 
 export default async function NotificationsPage({ params }: { params: Promise<{ workspace: string }> }) {
@@ -34,7 +34,7 @@ export default async function NotificationsPage({ params }: { params: Promise<{ 
   return (
     <div className="mx-auto grid max-w-3xl gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">Notificações</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Avisos</h1>
         {hasUnread && (
           <form action={markAllReadAction}>
             <input type="hidden" name="workspaceId" value={workspace.id} />

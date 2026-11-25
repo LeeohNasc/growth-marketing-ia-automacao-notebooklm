@@ -24,7 +24,7 @@ export default async function CalendarPage({
   searchParams,
 }: {
   params: Promise<{ workspace: string }>;
-  searchParams: Promise<{ view?: string; date?: string; campaign?: string; account?: string }>;
+  searchParams: Promise<{ view?: string; date?: string; campaign?: string; account?: string; status?: string }>;
 }) {
   const { workspace: slug } = await params;
   const sp = await searchParams;
@@ -45,7 +45,7 @@ export default async function CalendarPage({
   const supabase = await createClient();
   const [{ items }, { data: campaigns }, { data: accounts }] = await Promise.all([
     listJobs(workspace.id, {
-      statuses: STATUS_GROUPS.all!.statuses,
+      statuses: (STATUS_GROUPS[sp.status ?? ""] ?? STATUS_GROUPS.all!).statuses,
       campaign: sp.campaign,
       account: sp.account,
       from: startInstant,
@@ -96,7 +96,7 @@ export default async function CalendarPage({
         jobs={jobs}
         campaigns={campaigns ?? []}
         accounts={accounts ?? []}
-        filters={{ campaign: sp.campaign ?? "", account: sp.account ?? "" }}
+        filters={{ campaign: sp.campaign ?? "", account: sp.account ?? "", status: sp.status && STATUS_GROUPS[sp.status] ? sp.status : "" }}
         canEdit={can(role, "editContent")}
         tz={tz}
       />

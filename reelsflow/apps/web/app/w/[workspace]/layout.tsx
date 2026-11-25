@@ -1,4 +1,5 @@
 import { AppNav } from "@/components/app-nav";
+import { AreaTabs } from "@/components/area-tabs";
 import { Logo } from "@/components/logo";
 import { MobileNav } from "@/components/mobile-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -50,6 +51,7 @@ export default async function WorkspaceLayout({
           </div>
         </header>
         <main id="conteudo" className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
+          <AreaTabs slug={slug} />
           {children}
         </main>
       </div>

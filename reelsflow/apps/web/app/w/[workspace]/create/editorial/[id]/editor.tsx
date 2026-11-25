@@ -32,11 +32,13 @@ import { CardRenderError, renderCardImage, renderCardVideo, type CardRenderInput
 import { ensureCardFonts } from "@/lib/editorial/fonts";
 import { renderPreview } from "@/lib/editorial/preview";
 import { uploadFinalRender, waitForRenderVerdict } from "@/lib/editorial/publish-render";
-import { fetchSource, sourceAccept, sourceHint, uploadSource, validateSource, type LoadedSource, type SourceKind } from "@/lib/editorial/sources";
+import { copySource, fetchSource, sourceAccept, sourceHint, uploadSource, validateSource, type LoadedSource, type SourceKind } from "@/lib/editorial/sources";
 import { deleteCardAction, duplicateCardAction } from "../../actions";
 
 type Account = { id: string; display_name: string; username: string | null; platform: string; provider: "native" | "zernio" };
-type Slot = { src: LoadedSource | null; path: string | null; dirty: boolean };
+/** `copyFrom`: caminho de um vídeo da Biblioteca — ao salvar, o arquivo é copiado no armazenamento, não reenviado. */
+type Slot = { src: LoadedSource | null; path: string | null; dirty: boolean; copyFrom?: string };
+export type LibraryVideo = { id: string; name: string; storage_path: string; duration_ms: number | null; size_bytes: number };
 type Style = CardStyle & { watermark: CardStyle["watermark"] & { logoPath?: string | null } };
 
 const STATUS: Record<CardRenderStatus, { label: string; variant: "secondary" | "warning" | "success" | "outline" }> = {
@@ -64,6 +66,8 @@ export function EditorialEditor(props: {
   canEdit: boolean;
   card: EditorialCardRow;
   sourceUrls: { avatar: string | null; media: (string | null)[]; logo: string | null };
+  /** Vídeos prontos da Biblioteca (sem os arquivos gerados por cards). */
+  libraryVideos?: LibraryVideo[];
   accounts: Account[];
   renderedUrl: string | null;
 }) {
@@ -251,6 +255,25 @@ export function EditorialEditor(props: {
     }
   };
 
+  /** Vídeo escolhido na Biblioteca: baixa para a prévia/render; ao salvar, copia no armazenamento. */
+  const pickFromLibrary = async (id: string) => {
+    const v = props.libraryVideos?.find((x) => x.id === id);
+    if (!v) return;
+    setNotice(null);
+    setBusy("Carregando o vídeo da Biblioteca…");
+    try {
+      const { data } = await supabase.storage.from("media").createSignedUrl(v.storage_path, 600);
+      if (!data?.signedUrl) throw new CardRenderError("fetch", "Não foi possível abrir este vídeo da Biblioteca.");
+      const src = await fetchSource("video", data.signedUrl);
+      setMedia((m) => [{ src, path: null, dirty: true, copyFrom: v.storage_path }, m[1]]);
+      touch();
+    } catch (e) {
+      setNotice({ ok: false, text: e instanceof CardRenderError ? e.message : "Não foi possível abrir este vídeo da Biblioteca." });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const blocking = layout?.blocking ?? [];
   const warnings = layout?.warnings ?? [];
   const restrictions = cardPublishRestrictions(format, mediaKind);
@@ -267,8 +290,10 @@ export function EditorialEditor(props: {
       const up = async (slot: Slot, set: (s: Slot) => void): Promise<string | null> => {
         if (!slot.src) return null;
         if (!slot.dirty && slot.path) return slot.path;
-        const path = await uploadSource(supabase, props.workspaceId, c.id, slot.src);
-        set({ ...slot, path, dirty: false });
+        const path = slot.copyFrom
+          ? await copySource(supabase, props.workspaceId, c.id, slot.src, slot.copyFrom)
+          : await uploadSource(supabase, props.workspaceId, c.id, slot.src);
+        set({ ...slot, path, dirty: false, copyFrom: undefined });
         return path;
       };
       const avatarPath = await up(avatar, setAvatar);
@@ -502,6 +527,20 @@ export function EditorialEditor(props: {
                 disabled={filesDisabled}
               />
               <p className="text-xs text-muted-foreground">{sourceHint(mediaKind === "video" ? "video" : "image")}</p>
+              {mediaKind === "video" && (props.libraryVideos?.length ?? 0) > 0 && (
+                <div className="grid gap-1.5">
+                  <Label htmlFor="ec-library">Ou escolha um vídeo que já está na Biblioteca</Label>
+                  <NativeSelect id="ec-library" value="" onChange={(e) => e.target.value && pickFromLibrary(e.target.value)} disabled={filesDisabled}>
+                    <option value="">Escolher da Biblioteca…</option>
+                    {props.libraryVideos!.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.name}
+                        {v.duration_ms ? ` · ${Math.round(v.duration_ms / 1000)} s` : ""}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </div>
+              )}
               {fit === "cover" && media[i]?.src && (
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <label className="grid gap-1">

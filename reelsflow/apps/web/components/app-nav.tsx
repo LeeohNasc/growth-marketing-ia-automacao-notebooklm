@@ -3,8 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { LoaderCircle } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { IMPLEMENTED_SECTIONS, NAV_ITEMS, type NavItem } from "@/lib/nav";
+import { NAV_ITEMS, locate, type NavItem } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 
 /**
@@ -17,11 +16,12 @@ export function AppNav({ slug, onNavigate }: { slug: string; onNavigate?: () => 
   // Destaque provisório: vale só enquanto a URL for a mesma do momento do clique.
   const [clicked, setClicked] = useState<{ key: string; from: string } | null>(null);
   const pendingKey = clicked && clicked.from === pathname ? clicked.key : null;
+  const here = locate(pathname, slug)?.item.key ?? null;
   return (
     <nav aria-label="Navegação principal" className="flex flex-col gap-0.5 px-3">
       {NAV_ITEMS.map((item) => {
-        const href = `/w/${slug}/${item.key}`;
-        const atUrl = pathname === href || pathname.startsWith(`${href}/`);
+        const href = `/w/${slug}/${item.sections[0]!.path}`;
+        const atUrl = here === item.key;
         const active = pendingKey ? pendingKey === item.key : atUrl;
         return (
           <Link
@@ -53,7 +53,6 @@ function NavItemContent({ item, active, onSettled }: { item: NavItem; active: bo
     was.current = pending;
   }, [pending, onSettled]);
   const Icon = item.icon;
-  const ready = IMPLEMENTED_SECTIONS.has(item.key);
   return (
     <>
       {pending ? (
@@ -63,11 +62,6 @@ function NavItemContent({ item, active, onSettled }: { item: NavItem; active: bo
       )}
       <span className="flex-1 truncate">{item.label}</span>
       {pending && <span className="sr-only">(carregando)</span>}
-      {!ready && (
-        <Badge variant="outline" className="px-1.5 py-0 text-[10px]" aria-label={`Disponível na fase ${item.phase}`}>
-          F{item.phase}
-        </Badge>
-      )}
     </>
   );
 }

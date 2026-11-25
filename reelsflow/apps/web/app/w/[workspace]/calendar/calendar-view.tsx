@@ -35,10 +35,13 @@ type Props = {
   jobs: CalendarJob[];
   campaigns: { id: string; name: string }[];
   accounts: { id: string; display_name: string }[];
-  filters: { campaign: string; account: string };
+  filters: { campaign: string; account: string; status: string };
   canEdit: boolean;
   tz: string;
 };
+
+/** Filtros de situação (mesmos grupos da Lista; "canceladas" fica só na Lista). */
+const CALENDAR_STATUS_FILTERS = [["upcoming", "Agendadas"], ["active", "Saindo agora"], ["problems", "Com problema"], ["published", "Publicadas"]] as const;
 
 const VIEWS = [
   ["day", "Dia"],
@@ -188,6 +191,19 @@ export function CalendarView(p: Props) {
                 {l}
               </Button>
             ))}
+          </div>
+          <div className="grid gap-1">
+            <Label htmlFor="cal-status" className="sr-only">
+              Situação
+            </Label>
+            <NativeSelect id="cal-status" value={p.filters.status} onChange={(e) => go({ status: e.target.value })} className="h-9 w-auto">
+              <option value="">Todas as situações</option>
+              {CALENDAR_STATUS_FILTERS.map(([k, l]) => (
+                <option key={k} value={k}>
+                  {l}
+                </option>
+              ))}
+            </NativeSelect>
           </div>
           <div className="grid gap-1">
             <Label htmlFor="cal-campaign" className="sr-only">

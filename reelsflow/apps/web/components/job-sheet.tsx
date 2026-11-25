@@ -19,7 +19,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { ERROR_CLASS_LABELS, REVIEW_REASONS } from "@/lib/labels";
+import { TechDetails } from "@/components/tech-details";
+import { ERROR_CLASS_LABELS, REVIEW_REASONS, friendlyError } from "@/lib/labels";
 
 export function JobSheet({ slug, jobId, onClose, canEdit, displayTz }: { slug: string; jobId: string | null; onClose: () => void; canEdit: boolean; displayTz: string }) {
   const [details, setDetails] = useState<JobDetails | null>(null);
@@ -121,16 +122,6 @@ function JobBody({ slug, d, canEdit, displayTz, onChanged }: { slug: string; d: 
           <dt className="text-xs text-muted-foreground">Efetiva</dt>
           <dd>{d.publishedAt ? fmt(d.publishedAt) : "—"}</dd>
         </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">Tentativas</dt>
-          <dd>
-            {d.attemptCount} de {d.maxAttempts}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">ID externo</dt>
-          <dd className="truncate">{d.external?.externalId ?? "—"}</dd>
-        </div>
       </dl>
 
       {d.external?.permalink && (
@@ -143,20 +134,30 @@ function JobBody({ slug, d, canEdit, displayTz, onChanged }: { slug: string; d: 
       {(d.lastErrorClass || d.reviewReason) && (
         <div className="rounded-md border border-warning/40 bg-warning/10 p-3">
           {d.reviewReason && <p>{REVIEW_REASONS[d.reviewReason] ?? d.reviewReason}</p>}
-          {d.lastErrorClass && (
-            <p>
-              <strong>{ERROR_CLASS_LABELS[d.lastErrorClass] ?? d.lastErrorClass}</strong>
-              {d.lastErrorMessage ? `: ${d.lastErrorMessage}` : ""}
-            </p>
-          )}
+          {d.lastErrorClass && <p>{friendlyError(d.lastErrorClass)}</p>}
         </div>
       )}
 
+      <TechDetails>
+        <span>
+          Tentativas: {d.attemptCount} de {d.maxAttempts} · ID externo: {d.external?.externalId ?? "—"}
+        </span>
+        {d.lastErrorClass && (
+          <span>
+            Erro: {ERROR_CLASS_LABELS[d.lastErrorClass] ?? d.lastErrorClass}
+            {d.lastErrorMessage ? `: ${d.lastErrorMessage}` : ""}
+          </span>
+        )}
+        {d.effective?.caption !== undefined && (
+          <span>
+            Origem do texto: legenda {LAYER_LABELS[d.effective.sources?.caption as Layer] ?? "nenhuma"} · hashtags {LAYER_LABELS[d.effective.sources?.hashtags as Layer] ?? "nenhuma"}
+          </span>
+        )}
+      </TechDetails>
+
       {d.effective?.caption !== undefined && (
         <div className="grid gap-1">
-          <span className="text-xs text-muted-foreground">
-            Texto enviado (legenda: {LAYER_LABELS[d.effective.sources?.caption as Layer] ?? "nenhuma"}; hashtags: {LAYER_LABELS[d.effective.sources?.hashtags as Layer] ?? "nenhuma"})
-          </span>
+          <span className="text-xs text-muted-foreground">Texto que será publicado</span>
           <p className="whitespace-pre-wrap rounded-md bg-muted p-2">{d.effective.caption || "—"}</p>
         </div>
       )}

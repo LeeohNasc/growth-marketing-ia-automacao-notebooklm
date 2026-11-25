@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { Plus, X } from "lucide-react";
 import { ORDER_LABELS, ORDER_STRATEGIES, WEEKDAY_LABELS, type OrderStrategy } from "@reelsflow/domain";
+import { CaptionField } from "@/components/caption-field";
 import { TimezoneSelect } from "@/components/timezone-select";
 import { Button } from "@/components/ui/button";
 import { Input, NativeSelect } from "@/components/ui/input";
@@ -86,24 +87,5 @@ export function ScheduleFields({ defaults, errors = {}, showOrder = true }: { de
 }
 
 export function ContentFields({ caption, hashtags, captionLabel = "Legenda padrão" }: { caption?: string | null; hashtags?: string[]; captionLabel?: string }) {
-  return (
-    <div className="grid gap-4">
-      <div className="grid gap-2">
-        <Label htmlFor="caption">{captionLabel}</Label>
-        <textarea
-          id="caption"
-          name="caption"
-          rows={3}
-          maxLength={2200}
-          defaultValue={caption ?? ""}
-          className="rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        />
-        <p className="text-xs text-muted-foreground">Usada quando o vídeo não tem legenda própria.</p>
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor="hashtags">Hashtags padrão</Label>
-        <Input id="hashtags" name="hashtags" defaultValue={(hashtags ?? []).join(" ")} placeholder="#reels #dica" />
-      </div>
-    </div>
-  );
+  return <CaptionField caption={caption} hashtags={hashtags} label={captionLabel} rows={3} hint="Usada quando o vídeo não tem legenda própria. Escreva as hashtags no próprio texto." />;
 }

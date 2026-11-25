@@ -8,7 +8,7 @@ import { requireWorkspace } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { DeleteTemplateButton } from "./delete-button";
 
-export const metadata: Metadata = { title: "Modelos de Publicação" };
+export const metadata: Metadata = { title: "Padrões de publicação" };
 
 export default async function TemplatesPage({ params }: { params: Promise<{ workspace: string }> }) {
   const { workspace: slug } = await params;
@@ -21,7 +21,7 @@ export default async function TemplatesPage({ params }: { params: Promise<{ work
     <div className="mx-auto grid max-w-5xl gap-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Modelos de Publicação</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Padrões de publicação</h1>
           <p className="text-sm text-muted-foreground">Configure uma vez e reutilize em várias campanhas.</p>
         </div>
         {canEdit && (

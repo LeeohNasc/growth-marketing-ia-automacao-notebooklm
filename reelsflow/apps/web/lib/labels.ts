@@ -50,3 +50,19 @@ export const ERROR_CLASS_LABELS: Record<string, string> = {
   media_unavailable: "Vídeo excluído ou indisponível",
   lease_expired: "Processamento interrompido",
 };
+
+/**
+ * O que o usuário vê quando uma publicação dá erro: o que aconteceu e o que fazer, sem jargão.
+ * O detalhe técnico (classe + mensagem da plataforma) continua disponível em "Detalhes técnicos".
+ */
+export const FRIENDLY_ERRORS: Record<string, string> = {
+  transient: "A rede social falhou por um instante. Vamos tentar de novo automaticamente.",
+  rate_limited: "O Instagram pediu para esperar um pouco. Vamos tentar de novo automaticamente.",
+  auth: "Não conseguimos publicar. Verifique a conexão da conta em Configurações → Contas.",
+  permanent: "O Instagram recusou esta publicação. Confira o vídeo e a legenda e tente de novo.",
+  timeout: "A rede social demorou a responder. Vamos confirmar se saiu antes de tentar de novo.",
+  unknown: "Não conseguimos publicar. Tente de novo; se continuar, fale com o suporte.",
+  media_unavailable: "O vídeo foi excluído ou não está mais disponível. Escolha outro vídeo.",
+  lease_expired: "O envio foi interrompido. Vamos retomar automaticamente.",
+};
+export const friendlyError = (cls: string | null | undefined) => (cls ? (FRIENDLY_ERRORS[cls] ?? FRIENDLY_ERRORS.unknown!) : null);

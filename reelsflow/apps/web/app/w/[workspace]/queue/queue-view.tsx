@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { JobListItem } from "@/lib/jobs";
-import { ERROR_CLASS_LABELS } from "@/lib/labels";
+import { ERROR_CLASS_LABELS, friendlyError } from "@/lib/labels";
 import { cancelJobsAction, retryJobsAction, setQueuePausedAction } from "./actions";
 
 type Props = {
@@ -137,14 +137,13 @@ export function QueueView(p: Props) {
               <th className="px-3 py-2 font-medium">Conta</th>
               <th className="px-3 py-2 font-medium">Campanha</th>
               <th className="px-3 py-2 font-medium">Status</th>
-              <th className="px-3 py-2 font-medium">Tent.</th>
-              <th className="px-3 py-2 font-medium">Erro / link</th>
+              <th className="px-3 py-2 font-medium">Situação / link</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {p.items.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-3 py-10 text-center text-muted-foreground">
+                <td colSpan={7} className="px-3 py-10 text-center text-muted-foreground">
                   Nenhuma publicação neste filtro.
                 </td>
               </tr>
@@ -171,15 +170,14 @@ export function QueueView(p: Props) {
                   <td className="px-3 py-2">
                     <JobStatusBadge status={j.status as JobStatus} />
                   </td>
-                  <td className="px-3 py-2 tabular-nums">{j.attempt_count}</td>
                   <td className="max-w-56 px-3 py-2 text-xs">
                     {j.permalink ? (
                       <a href={j.permalink} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
                         {j.externalId ?? "Abrir"}
                       </a>
                     ) : j.last_error_class ? (
-                      <span className="text-muted-foreground" title={j.last_error_message ?? ""}>
-                        {ERROR_CLASS_LABELS[j.last_error_class] ?? j.last_error_class}
+                      <span className="text-muted-foreground" title={`${ERROR_CLASS_LABELS[j.last_error_class] ?? j.last_error_class}${j.last_error_message ? `: ${j.last_error_message}` : ""} · ${j.attempt_count} tentativa(s)`}>
+                        {friendlyError(j.last_error_class)}
                       </span>
                     ) : (
                       "—"

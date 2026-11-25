@@ -5,7 +5,7 @@ import { requireWorkspace } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { QueueView } from "./queue-view";
 
-export const metadata: Metadata = { title: "Fila de Publicações" };
+export const metadata: Metadata = { title: "Lista de publicações" };
 
 const PAGE = 50;
 
@@ -37,8 +37,8 @@ export default async function QueuePage({
   return (
     <div className="mx-auto grid max-w-7xl gap-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Fila de Publicações</h1>
-        <p className="text-sm text-muted-foreground">Status de cada publicação, tentativas e erros. Clique no horário para ver detalhes.</p>
+        <h1 className="text-2xl font-semibold tracking-tight">Lista de publicações</h1>
+        <p className="text-sm text-muted-foreground">Todas as publicações e a situação de cada uma. Clique no horário para ver detalhes ou reagendar.</p>
       </div>
       <QueueView
         key={`${group}|${sp.campaign}|${sp.account}|${page}`}

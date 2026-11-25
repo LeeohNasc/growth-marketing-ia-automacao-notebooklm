@@ -3,6 +3,7 @@ import { useActionState, useTransition, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MOCK_BEHAVIORS, MOCK_BEHAVIOR_LABELS, type MockBehavior } from "@reelsflow/connectors";
 import { Field, FormMessage, SubmitButton } from "@/components/form";
+import { TechDetails } from "@/components/tech-details";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input, NativeSelect } from "@/components/ui/input";
@@ -80,17 +81,18 @@ export function AccountRow({ slug, acc, canManage, metaEnabled, igEnabled }: { s
           {acc.username && <span className="text-xs text-muted-foreground">@{acc.username}</span>}
         </span>
         {acc.status === "active" && acc.platform !== "mock" && <Badge variant="success">Conectada</Badge>}
-        {acc.provider === "zernio" && <Badge variant="outline">via Zernio</Badge>}
         <Badge variant={acc.platform === "mock" ? "warning" : "secondary"}>{PLATFORM_NAME[acc.platform] ?? acc.platform}</Badge>
         {acc.status === "needs_reauth" && <Badge variant="outline" className="border-destructive text-destructive">Requer reconexão</Badge>}
         {acc.status === "disconnected" && <Badge variant="outline">Desconectada</Badge>}
         {acc.paused && <Badge variant="secondary">Pausada</Badge>}
       </div>
       {acc.provider === "zernio" && acc.status === "needs_reauth" && (
-        <p className="text-xs text-destructive">
-          A Zernio informou que esta conta precisa ser reconectada. Reconecte-a no painel da Zernio; o ReelsFlow volta a publicar sozinho em até
-          10 minutos.
-        </p>
+        <div className="grid gap-1">
+          <p className="text-xs text-destructive">Não conseguimos publicar nesta conta. Verifique a conexão da conta.</p>
+          <TechDetails>
+            <span>A conta é publicada pela Zernio, que pediu reconexão. Reconecte-a no painel da Zernio; o ReelsFlow volta a publicar sozinho em até 10 minutos.</span>
+          </TechDetails>
+        </div>
       )}
       {acc.provider === "native" && acc.platform === "instagram" && acc.token_expires_at && acc.status === "active" && (
         <p className="text-xs text-muted-foreground">

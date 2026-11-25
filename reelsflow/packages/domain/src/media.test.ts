@@ -124,7 +124,7 @@ describe("evaluateCompatibility", () => {
   });
 });
 
-import { normalizeHashtags } from "./media";
+import { extraHashtags, hashtagsInText, normalizeHashtags } from "./media";
 import { ilikePattern } from "./validators";
 
 describe("normalizeHashtags", () => {
@@ -138,5 +138,17 @@ describe("normalizeHashtags", () => {
 describe("ilikePattern", () => {
   it("escapa curingas", () => {
     expect(ilikePattern("50%_off")).toBe("%50\\%\\_off%");
+  });
+});
+
+describe("hashtags na legenda", () => {
+  const caption = "Segunda-feira, 9h01. 💀☕🐱\nMarca aquele amigo 😂👇\n#memes #Humor #segundafeira";
+  it("detecta as hashtags escritas no texto", () => {
+    expect(hashtagsInText(caption)).toEqual(["#memes", "#Humor", "#segundafeira"]);
+    expect(hashtagsInText("sem tags, só texto. Preço #1!")).toEqual(["#1"]);
+  });
+  it("campo separado: só o que ainda não está no texto (sem diferenciar maiúsculas)", () => {
+    expect(extraHashtags(caption, ["#humor", "#trabalho", "#Memes"])).toEqual(["#trabalho"]);
+    expect(extraHashtags("", ["#a"])).toEqual(["#a"]);
   });
 });

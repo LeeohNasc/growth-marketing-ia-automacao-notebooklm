@@ -25,8 +25,10 @@ import {
   aspectLabel,
   formatBytes,
   formatDuration,
+  normalizeHashtags,
   type Compatibility,
 } from "@reelsflow/domain";
+import { CaptionField } from "@/components/caption-field";
 import { Field, FormMessage, SubmitButton } from "@/components/form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -438,7 +440,7 @@ function EmptyState({ slug, canEdit, filtered }: { slug: string; canEdit: boolea
       </p>
       {!filtered && canEdit && (
         <Button asChild>
-          <Link href={`/w/${slug}/upload`}>Enviar vídeos</Link>
+          <Link href={`/w/${slug}/library?enviar=1`}>Enviar vídeos</Link>
         </Button>
       )}
     </div>
@@ -606,19 +608,11 @@ function MediaDetail({
             <input type="hidden" name="slug" value={slug} />
             <input type="hidden" name="id" value={item.id} />
             <Field label="Nome" name="name" defaultValue={state.values?.name ?? item.name} error={state.fieldErrors?.name} />
-            <div className="grid gap-2">
-              <Label htmlFor="caption">Legenda</Label>
-              <textarea
-                id="caption"
-                name="caption"
-                rows={4}
-                maxLength={2200}
-                defaultValue={state.values?.caption ?? item.default_caption ?? ""}
-                className="rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-              {state.fieldErrors?.caption && <p className="text-xs text-destructive">{state.fieldErrors.caption}</p>}
-            </div>
-            <Field label="Hashtags" name="hashtags" hint="Separe por espaço ou vírgula. Máximo de 30." defaultValue={state.values?.hashtags ?? item.default_hashtags.join(" ")} />
+            <CaptionField
+              caption={state.values?.caption ?? item.default_caption ?? ""}
+              hashtags={state.values?.hashtags !== undefined ? normalizeHashtags(state.values.hashtags) : item.default_hashtags}
+              error={state.fieldErrors?.caption}
+            />
             <SubmitButton className="justify-self-start" pendingText="Salvando…">
               Salvar
             </SubmitButton>

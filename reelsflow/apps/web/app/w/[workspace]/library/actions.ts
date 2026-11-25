@@ -1,6 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { collectionNameSchema, fieldErrors, normalizeHashtags, updateMediaSchema } from "@reelsflow/domain";
+import { collectionNameSchema, extraHashtags, fieldErrors, normalizeHashtags, updateMediaSchema } from "@reelsflow/domain";
 import type { ActionState } from "@/lib/action-state";
 import { requireWorkspace } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
@@ -46,7 +46,7 @@ export async function updateMediaAction(_prev: ActionState, formData: FormData):
   const { supabase, workspaceId, path } = await ctx(slug);
   const { data, error } = await supabase
     .from("media_assets")
-    .update({ name: parsed.data.name, default_caption: parsed.data.caption || null, default_hashtags: normalizeHashtags(parsed.data.hashtags) })
+    .update({ name: parsed.data.name, default_caption: parsed.data.caption || null, default_hashtags: extraHashtags(parsed.data.caption, normalizeHashtags(parsed.data.hashtags)) })
     .eq("id", id)
     .eq("workspace_id", workspaceId)
     .select("id");

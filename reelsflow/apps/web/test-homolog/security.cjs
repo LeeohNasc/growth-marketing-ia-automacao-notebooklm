@@ -122,9 +122,9 @@ function sessionEnded(name, c) {
         const c = await chain(ctx, `/w/${A.slug}/library`);
         ok(!c.leaked && c.hops[0].status === 307 && c.hops[0].ms >= AUTH_DELAY * 0.9, `getUser lento (+${AUTH_DELAY} ms) e sessão revogada: 1ª resposta é redirecionamento após ${c.hops[0].ms} ms, sem dados`); await ctx.close(); }
       { const { ctx, p } = await login(b, S.email, S.pass);
-        await p.goto(`${SITE}/w/${A.slug}/campaigns`); await p.locator("main h1", { hasText: "Campanhas" }).waitFor({ timeout: 60000 });
+        await p.goto(`${SITE}/w/${A.slug}/create`); await p.locator("main h1", { hasText: "Criar publicação" }).waitFor({ timeout: 60000 });
         await p.evaluate(() => { window.__seen = []; new MutationObserver(() => window.__seen.push([performance.now(), document.querySelector("main")?.innerText ?? ""])).observe(document, { subtree: true, childList: true, characterData: true }); window.__t0 = performance.now(); });
-        await p.locator("aside").getByRole("link", { name: "Biblioteca de Vídeos", exact: true }).click(); await p.locator("main h1", { hasText: "Biblioteca" }).waitFor({ timeout: 60000 });
+        await p.locator("main nav").getByRole("link", { name: "Biblioteca", exact: true }).click(); await p.locator("main h1", { hasText: "Biblioteca" }).waitFor({ timeout: 60000 });
         const r = await p.evaluate(() => { const first = window.__seen.find(([, t]) => /vídeos/.test(t) && /Video sintetico|\d+ vídeos/.test(t)); return { firstData: first ? first[0] - window.__t0 : null }; });
         ok(r.firstData !== null && r.firstData >= AUTH_DELAY * 0.9, `getUser lento (+${AUTH_DELAY} ms), sessão válida: dados da Biblioteca só aparecem após ${Math.round(r.firstData)} ms (depois do getUser)`); await ctx.close(); }
     } else console.log("PULADO  testes de getUser lento (defina HOMOLOG_AUTH_DELAY_MS e use o latency-proxy)");
