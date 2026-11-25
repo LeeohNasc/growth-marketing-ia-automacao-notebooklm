@@ -203,7 +203,7 @@ test.describe("vertical v2 — área segura dos Reels", () => {
     content({ format: "vertical", mediaKind: "video", pageName: "🍿 Pipocou | Humor e Memes", headline: "EU NA REUNIÃO DE SEGUNDA:", templateVersion: 2, ...over });
   const style = { watermark: { kind: "username", position: "bottom-right", opacity: 0.9 }, badge: { enabled: true } };
 
-  test("prévia == arquivo final (com selo e marca-d'água) e a simulação do Instagram NÃO vai para o arquivo", async ({ page }) => {
+  test("prévia == arquivo final (com selo) e a simulação do Instagram NÃO vai para o arquivo", async ({ page }) => {
     const cfg = { content: v2({ mediaKind: "image" }), avatar: `${FX}/avatar.png`, media: [`${FX}/photo1.jpg`], style };
     const cmp = await rf(page, "previewVsExport", cfg);
     expect(cmp.maxDiff).toBe(0);
@@ -216,13 +216,13 @@ test.describe("vertical v2 — área segura dos Reels", () => {
     expect(await rf(page, "diff", overlay.data, "image/png", exp.data!, "image/png", full)).toBeGreaterThan(0);
   });
 
-  test("vídeo 9:16: avatar, nome, selo, @ e marca-d'água dentro da área segura e visíveis no MP4", async ({ page }) => {
+  test("vídeo 9:16: identidade dentro da área segura e visível no MP4; vídeo até a base; sem marca-d'água inferior", async ({ page }) => {
     const cfg = { content: v2(), avatar: `${FX}/avatar.png`, style };
     const r = await rf(page, "video", cfg, `${FX}/vertical-noaudio.mp4`);
     expect(r.error, r.message).toBeUndefined();
     const f = save("v2-reels.mp4", r.data!);
     const v = ffprobe(f).streams.find((s: { codec_type: string }) => s.codec_type === "video");
-    expect([v.width, v.height]).toEqual([1080, 1920]);
+    expect([v.codec_name, v.pix_fmt, v.width, v.height]).toEqual(["h264", "yuv420p", 1080, 1920]);
     const frame = path.join(OUT, "v2-reels-frame.png");
     execFileSync("ffmpeg", ["-y", "-v", "error", "-ss", "0.5", "-i", f, "-frames:v", "1", frame]);
     const png = readFileSync(frame).toString("base64");
@@ -232,9 +232,21 @@ test.describe("vertical v2 — área segura dos Reels", () => {
     expect(within(l.avatar)).toBe(true);
     expect(within(l.badge!)).toBe(true);
     for (const r of [l.avatar, l.badge!]) expect((await rf(page, "stats", png, "image/png", inner(r, 4))).nonWhite).toBeGreaterThan(0.3);
-    const w = l.watermarkAnchor!;
-    expect(w.x).toBeLessThanOrEqual(1080 - 220);
-    expect(w.y + w.size).toBeLessThanOrEqual(1920 - 400);
-    expect((await rf(page, "stats", png, "image/png", { x: w.x - 300, y: w.y - w.size / 2, w: 300, h: w.size })).nonWhite).toBeGreaterThan(0.01);
+    expect((await rf(page, "stats", png, "image/png", inner(textRect(l)))).dark).toBeGreaterThan(0.01); // nome/@/manchete
+    expect(l.watermarkAnchor).toBeNull();
+    expect(l.media.y + l.media.h).toBe(1920);
+    // a faixa de baixo é vídeo, não branco
+    expect((await rf(page, "stats", png, "image/png", { x: 140, y: 1700, w: 800, h: 200 })).nonWhite).toBeGreaterThan(0.9);
+  });
+
+  test("vídeo 9:16 com áudio: AAC preservado, mesma duração", async ({ page }) => {
+    const r = await rf(page, "video", { content: v2(), avatar: `${FX}/avatar.png`, style }, `${FX}/source.mp4`);
+    expect(r.error, r.message).toBeUndefined();
+    expect(r.hasAudio).toBe(true);
+    const info = ffprobe(save("v2-reels-audio.mp4", r.data!));
+    const a = info.streams.find((s: { codec_type: string }) => s.codec_type === "audio");
+    expect([a.codec_name, a.sample_rate, a.channels]).toEqual(["aac", "48000", 2]);
+    const src = ffprobe(path.join(__dirname, "site", "fixtures", "source.mp4"));
+    expect(Math.abs(Number(info.format.duration) - Number(src.format.duration))).toBeLessThan(0.1);
   });
 });

@@ -24,8 +24,11 @@ export const EDITORIAL_TEMPLATE_VERSION = 2;
  * projeto, não medidas oficiais: o Instagram amplia o 9:16 para preencher telas mais altas (corta ~96 px de
  * cada lateral num iPhone), sobrepõe abas no topo, a coluna de botões à direita e perfil/legenda/barra na base.
  * `rightRail`: distância mínima da borda direita para o que fica na metade inferior (coluna de botões).
+ * `bottom`: nenhum TEXTO/IDENTIDADE abaixo de 1920 − 400; o vídeo pode (e vai) até a base.
  */
 export const REELS_SAFE_AREA = { side: 120, top: 285, bottom: 400, rightRail: 220 } as const;
+/** No V2 vertical o vídeo ocupa até a base e não há marca-d'água inferior (o @ fica no cabeçalho). */
+export const usesReelsLayout = (c: Pick<CardContent, "format" | "templateVersion">) => c.format === "vertical" && (c.templateVersion ?? 1) >= 2;
 
 export const CARD_FORMATS = {
   feed: { width: 1080, height: 1350, label: "Feed 4:5 (1080×1350)" },
@@ -228,12 +231,9 @@ export function computeCardLayout(content: CardContent, styleIn: Partial<CardSty
 
   const isVertical = content.format === "vertical";
   // Versão 2 no vertical: tudo que identifica o perfil fica dentro da área segura dos Reels.
-  const reels = isVertical && (content.templateVersion ?? 1) >= 2;
+  const reels = usesReelsLayout(content);
   const R = { side: REELS_SAFE_AREA.side * u, top: REELS_SAFE_AREA.top * u, bottom: REELS_SAFE_AREA.bottom * u, rail: REELS_SAFE_AREA.rightRail * u };
   const padX = reels ? R.side : M.padX * u;
-  const hasWatermark = style.watermark.kind !== "none";
-  const wmSize = M.watermarkSize * u;
-  const wmBand = reels && hasWatermark ? Math.round(wmSize * 2.2) : 0;
   const safeArea: Rect = reels
     ? { x: R.side, y: R.top, w: width - 2 * R.side, h: height - R.top - R.bottom }
     : isVertical
@@ -241,8 +241,9 @@ export function computeCardLayout(content: CardContent, styleIn: Partial<CardSty
       : { x: M.padX * u, y: M.padTop * u, w: width - 2 * M.padX * u, h: height - 2 * M.padTop * u };
 
   const top = isVertical ? safeArea.y : M.padTop * u;
+  // V2: o vídeo vai até a base do canvas (pode ficar atrás da legenda do Instagram); só a identidade é protegida.
   const bottomPadding = reels
-    ? Math.max(clamp(style.bottomPadding, 0, 240) * u, R.bottom) + wmBand
+    ? 0
     : Math.max(clamp(style.bottomPadding, 0, 240) * u, isVertical ? height * VERTICAL_SAFE.bottom : 0);
 
   const avatarSize = M.avatar * u;
@@ -326,17 +327,8 @@ export function computeCardLayout(content: CardContent, styleIn: Partial<CardSty
   }
 
   let watermarkAnchor: CardLayout["watermarkAnchor"] = null;
-  if (reels && hasWatermark) {
-    // Faixa branca logo ACIMA da área inferior coberta (perfil, legenda, barra) e à esquerda da coluna de botões.
-    const right = style.watermark.position === "bottom-right";
-    watermarkAnchor = {
-      x: right ? width - R.rail : R.side,
-      y: height - R.bottom - wmBand / 2,
-      align: right ? "right" : "left",
-      size: wmSize,
-      maxWidth: width - R.rail - R.side,
-    };
-  } else if (style.watermark.kind !== "none") {
+  // V2: sem marca-d'água inferior (ficaria atrás da interface do Instagram); o @ já está no cabeçalho.
+  if (!reels && style.watermark.kind !== "none") {
     const size = M.watermarkSize * u;
     const inPadding = bottomPadding >= size * 2;
     const y = inPadding ? mediaBottom + bottomPadding / 2 : mediaBottom - size;

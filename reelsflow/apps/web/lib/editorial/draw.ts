@@ -232,8 +232,9 @@ function drawReelsOverlay(ctx: Ctx, l: CardLayout): void {
   ctx.font = `600 ${Math.round(26 * k)}px ${font}`;
   ctx.textAlign = "center";
   ctx.fillStyle = "#FFFFFF";
-  ctx.fillText("Simulação aproximada do Instagram — não sai no arquivo final", l.width / 2, 1810 * k);
+  ctx.fillText("Simulação aproximada do Instagram — não sai no arquivo final", l.width / 2, 1790 * k);
   ctx.font = `400 ${Math.round(22 * k)}px ${font}`;
-  ctx.fillText("Vermelho: faixas de risco · Azul: referência 1080×1350 · Rosa: área segura do card", l.width / 2, 1850 * k);
+  ctx.fillText("Vermelho: risco — o vídeo continua atrás; evite texto importante ali", l.width / 2, 1830 * k);
+  ctx.fillText("Azul: referência 1080×1350 · Rosa: área segura da identidade", l.width / 2, 1862 * k);
   ctx.restore();
 }

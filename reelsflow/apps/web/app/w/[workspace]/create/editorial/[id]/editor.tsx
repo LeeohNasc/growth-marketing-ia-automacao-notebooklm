@@ -6,6 +6,7 @@ import {
   CARD_FORMATS,
   CARD_FORMAT_KEYS,
   DEFAULT_CARD_STYLE,
+  usesReelsLayout,
   HEADLINE_MAX_CHARS,
   cardPublishRestrictions,
   headlineLength,
@@ -141,6 +142,7 @@ export function EditorialEditor(props: {
   const videoUrl = useMemo(() => (videoBlob ? URL.createObjectURL(videoBlob) : null), [videoBlob]);
   useEffect(() => () => void (videoUrl && URL.revokeObjectURL(videoUrl)), [videoUrl]);
 
+  const reelsLayout = usesReelsLayout({ format, templateVersion: c.template_version });
   const content: CardContent = useMemo(
     () => ({ format, pageName, username: normalizeUsername(username), headline, mediaKind, fit, templateVersion: c.template_version }),
     [format, pageName, username, headline, mediaKind, fit, c.template_version],
@@ -530,10 +532,12 @@ export function EditorialEditor(props: {
 
         <section className="grid gap-3 rounded-xl border p-4">
           <h2 className="font-medium">Estilo — Clássico</h2>
-          <div className="grid gap-1.5">
-            <Label htmlFor="ec-pad">Respiro inferior: {style.bottomPadding}px</Label>
-            <input id="ec-pad" type="range" min={0} max={240} step={4} value={style.bottomPadding} onChange={(e) => (setStyle({ ...style, bottomPadding: Number(e.target.value) }), touch())} disabled={!props.canEdit} />
-          </div>
+          {!reelsLayout && (
+            <div className="grid gap-1.5">
+              <Label htmlFor="ec-pad">Respiro inferior: {style.bottomPadding}px</Label>
+              <input id="ec-pad" type="range" min={0} max={240} step={4} value={style.bottomPadding} onChange={(e) => (setStyle({ ...style, bottomPadding: Number(e.target.value) }), touch())} disabled={!props.canEdit} />
+            </div>
+          )}
           <label className="flex items-start gap-2 text-sm">
             <input type="checkbox" className="mt-1" checked={Boolean(style.badge?.enabled)} onChange={(e) => (setStyle({ ...style, badge: { enabled: e.target.checked } }), touch())} disabled={!props.canEdit} />
             <span>
@@ -541,34 +545,42 @@ export function EditorialEditor(props: {
               <span className="block text-xs text-muted-foreground">Selo próprio da sua identidade visual (estrela). Não é o selo de verificação do Instagram.</span>
             </span>
           </label>
-          <div className="grid gap-1.5">
-            <Label htmlFor="ec-wm">Marca-d’água (sua)</Label>
-            <NativeSelect id="ec-wm" value={style.watermark.kind} onChange={(e) => (setStyle({ ...style, watermark: { ...style.watermark, kind: e.target.value as Style["watermark"]["kind"] } }), touch())} disabled={!props.canEdit}>
-              <option value="none">Sem marca-d’água</option>
-              <option value="username">Seu @usuário</option>
-              <option value="logo">Seu logo</option>
-            </NativeSelect>
-          </div>
-          {style.watermark.kind === "logo" && (
-            <div className="grid gap-1.5">
-              <Label htmlFor="ec-logo">Logo (PNG com fundo transparente funciona melhor)</Label>
-              <Input id="ec-logo" type="file" accept={sourceAccept("logo")} onChange={(e) => pick("logo", e.target.files?.[0], setLogo)} disabled={filesDisabled} />
-            </div>
-          )}
-          {style.watermark.kind !== "none" && (
-            <div className="grid grid-cols-2 gap-3">
+          {reelsLayout ? (
+            <p className="text-xs text-muted-foreground">
+              No 9:16 o vídeo vai até a base do quadro e não há marca-d’água inferior: ela ficaria atrás da legenda do Instagram. O seu @ continua no cabeçalho.
+            </p>
+          ) : (
+            <>
               <div className="grid gap-1.5">
-                <Label htmlFor="ec-wm-pos">Posição</Label>
-                <NativeSelect id="ec-wm-pos" value={style.watermark.position} onChange={(e) => (setStyle({ ...style, watermark: { ...style.watermark, position: e.target.value as "bottom-right" | "bottom-left" } }), touch())} disabled={!props.canEdit}>
-                  <option value="bottom-right">Embaixo à direita</option>
-                  <option value="bottom-left">Embaixo à esquerda</option>
+                <Label htmlFor="ec-wm">Marca-d’água (sua)</Label>
+                <NativeSelect id="ec-wm" value={style.watermark.kind} onChange={(e) => (setStyle({ ...style, watermark: { ...style.watermark, kind: e.target.value as Style["watermark"]["kind"] } }), touch())} disabled={!props.canEdit}>
+                  <option value="none">Sem marca-d’água</option>
+                  <option value="username">Seu @usuário</option>
+                  <option value="logo">Seu logo</option>
                 </NativeSelect>
               </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="ec-wm-op">Opacidade: {Math.round(style.watermark.opacity * 100)}%</Label>
-                <input id="ec-wm-op" type="range" min={0.2} max={1} step={0.05} value={style.watermark.opacity} onChange={(e) => (setStyle({ ...style, watermark: { ...style.watermark, opacity: Number(e.target.value) } }), touch())} disabled={!props.canEdit} />
-              </div>
-            </div>
+              {style.watermark.kind === "logo" && (
+                <div className="grid gap-1.5">
+                  <Label htmlFor="ec-logo">Logo (PNG com fundo transparente funciona melhor)</Label>
+                  <Input id="ec-logo" type="file" accept={sourceAccept("logo")} onChange={(e) => pick("logo", e.target.files?.[0], setLogo)} disabled={filesDisabled} />
+                </div>
+              )}
+              {style.watermark.kind !== "none" && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="ec-wm-pos">Posição</Label>
+                    <NativeSelect id="ec-wm-pos" value={style.watermark.position} onChange={(e) => (setStyle({ ...style, watermark: { ...style.watermark, position: e.target.value as "bottom-right" | "bottom-left" } }), touch())} disabled={!props.canEdit}>
+                      <option value="bottom-right">Embaixo à direita</option>
+                      <option value="bottom-left">Embaixo à esquerda</option>
+                    </NativeSelect>
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="ec-wm-op">Opacidade: {Math.round(style.watermark.opacity * 100)}%</Label>
+                    <input id="ec-wm-op" type="range" min={0.2} max={1} step={0.05} value={style.watermark.opacity} onChange={(e) => (setStyle({ ...style, watermark: { ...style.watermark, opacity: Number(e.target.value) } }), touch())} disabled={!props.canEdit} />
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </section>
 

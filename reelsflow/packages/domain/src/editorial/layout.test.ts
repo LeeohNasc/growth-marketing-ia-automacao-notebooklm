@@ -203,25 +203,22 @@ describe("vertical v2 — área segura dos Reels", () => {
     }
   });
 
-  it("marca-d'água acima da área inferior e longe da coluna de botões (nos dois lados)", () => {
-    for (const position of ["bottom-right", "bottom-left"] as const) {
-      const l = computeCardLayout(v({ templateVersion: 2 }), { watermark: { kind: "username", position, opacity: 0.9 } }, measure);
-      const wm = l.watermarkAnchor!;
-      expect(wm.y + wm.size).toBeLessThanOrEqual(1920 - S.bottom);
-      expect(wm.y).toBeGreaterThan(l.media.y + l.media.h); // na faixa branca, não sobre o vídeo
-      const left = wm.align === "right" ? wm.x - wm.maxWidth : wm.x;
-      const right = wm.align === "right" ? wm.x : wm.x + wm.maxWidth;
-      expect(left).toBeGreaterThanOrEqual(S.side);
-      expect(right).toBeLessThanOrEqual(1080 - S.rightRail);
+  it("vídeo vai até a base do canvas, na largura toda; sem marca-d'água inferior (o @ fica no cabeçalho)", () => {
+    for (const kind of ["none", "username", "logo"] as const) {
+      const l = computeCardLayout(v({ templateVersion: 2 }), { watermark: { kind, position: "bottom-right", opacity: 0.9 }, bottomPadding: 200 }, measure);
+      expect(l.media).toEqual({ x: 0, y: l.media.y, w: 1080, h: 1920 - l.media.y });
+      expect(l.media.h).toBeGreaterThan(1400);
+      expect(l.watermarkAnchor).toBeNull();
+      expect(l.blocking).toEqual([]);
+      expect(l.username.text).toBe("@pipocoumemes");
     }
   });
 
-  it("vídeo continua ocupando a largura toda e com altura útil", () => {
-    const l = computeCardLayout(v({ templateVersion: 2 }), { watermark: { kind: "username", position: "bottom-right", opacity: 0.9 } }, measure);
-    expect(l.media.x).toBe(0);
-    expect(l.media.w).toBe(1080);
-    expect(l.media.h).toBeGreaterThan(900);
-    expect(l.blocking).toEqual([]);
+  it("nenhum texto de identidade na área inferior coberta nem na coluna de botões", () => {
+    const l = computeCardLayout(v({ templateVersion: 2 }), { badge: { enabled: true } }, measure);
+    for (const r of [l.name, l.username, ...l.headline.lines]) expect(r.y).toBeLessThan(1920 - S.bottom);
+    // a coluna de botões começa em ~1125 px de altura; o cabeçalho termina bem antes
+    expect(l.media.y).toBeLessThan(600);
   });
 
   it("selo na mesma linha do nome, 6–8 px depois dele, centralizado e dentro da área segura", () => {
@@ -253,10 +250,10 @@ describe("vertical v2 — área segura dos Reels", () => {
     const src = { width: 1080, height: 1920 };
     const c = fitMedia(src, cover.media, "cover");
     expect(c.sw).toBe(1080); // largura inteira do vídeo original
-    expect(c.sh / 1920).toBeGreaterThan(0.5); // "Preencher": mais da metade da altura original visível
+    expect(c.sh / 1920).toBeGreaterThan(0.74); // "Preencher": ~75% da altura original visível
     const k = fitMedia(src, cover.media, "contain");
     expect([k.sw, k.sh]).toEqual([1080, 1920]); // "Mostrar tudo": vídeo inteiro, sem corte
-    expect(k.dw).toBeGreaterThan(540); // e ainda com mais da metade da largura do card
+    expect(k.dw).toBeGreaterThan(800); // ~809 px de largura no card
   });
 
   it("v2 não altera feed nem quadrado", () => {
