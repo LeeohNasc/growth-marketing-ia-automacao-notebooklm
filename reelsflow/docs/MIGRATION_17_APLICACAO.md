@@ -11,3 +11,10 @@
   publicação do V41 intacta (rascunho, mesmo arquivo, conta e horário; 0 tentativas); totais de tentativas e posts
   externos inalterados (1 e 1, de 21/11).
 - **Rollback:** `docs/rollback/20261125000017_down.sql` (restaura as duas funções exatamente; não toca em dados).
+
+## Primeiro teste real após a correção — Card Editorial "Reunião de segunda — V41"
+| Hora (São Paulo) | Evento |
+|---|---|
+| 23:40:15 | rascunho vencido (22:40) reagendado pelo usuário para 23:45 — aceito (antes da migration 17 era recusado) |
+| 23:41:18 | campanha ativada → publicação agendada (planejamento não criou nada novo) |
+| 23:45:46 | **publicado** no Instagram @pipocoumemes, 46 s após o horário, **1 tentativa**, 1 post externo (ID + link), 0 alertas |
