@@ -9,6 +9,7 @@ Testes que exigem login real, revogação de sessão ou medição de navegação
 | `security.cjs` | sem login, cookie inválido, 4 papéis, outro workspace, sem vínculo, vínculo removido, papel rebaixado, JWT adulterado, sessão revogada (outro dispositivo, bloqueio, exclusão), revogado + sem vínculo, **nada sai antes do `getUser`** (Auth lento), expiração com e sem renovação | local |
 | `ux.cjs` | destaque do menu, voltar/avançar, cliques rápidos, teclado, Ctrl+clique, celular, deslocamento de layout, erros de console | local |
 | `nav-bench.cjs` | clique → resposta visual / URL / conteúdo utilizável, tarefas longas, CPU, renderizações, chamadas ao Supabase em fila | local |
+| `library-card.cjs` | vídeo da Biblioteca no Card Editorial com Storage/RLS reais: cópia própria, original intacto, sem reenvio, aviso de duplicado, isolamento entre workspaces e papel de leitura | local |
 | `remote-readonly.cjs` | rotas protegidas, tempos, região da função, desktop/celular, console — **só GET, sem login** | prévia ou produção |
 | `seed.cjs` / `latency-proxy.cjs` | dados sintéticos / atraso servidor → Supabase | local |
 
