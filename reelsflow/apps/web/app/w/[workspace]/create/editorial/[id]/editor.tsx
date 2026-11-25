@@ -68,6 +68,8 @@ export function EditorialEditor(props: {
   sourceUrls: { avatar: string | null; media: (string | null)[]; logo: string | null };
   /** Vídeos prontos da Biblioteca (sem os arquivos gerados por cards). */
   libraryVideos?: LibraryVideo[];
+  /** Vídeo da Biblioteca a carregar automaticamente (vindo da Publicação rápida). */
+  initialLibraryVideoId?: string;
   accounts: Account[];
   renderedUrl: string | null;
 }) {
@@ -273,6 +275,15 @@ export function EditorialEditor(props: {
       setBusy(null);
     }
   };
+
+  // Vindo da Publicação rápida: carrega o vídeo escolhido uma única vez, se o card ainda não tem vídeo.
+  const autoPicked = useRef(false);
+  useEffect(() => {
+    if (autoPicked.current || loadingSources || !props.initialLibraryVideoId || media[0].src) return;
+    autoPicked.current = true;
+    void pickFromLibrary(props.initialLibraryVideoId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadingSources, props.initialLibraryVideoId]);
 
   const blocking = layout?.blocking ?? [];
   const warnings = layout?.warnings ?? [];
@@ -755,7 +766,7 @@ export function EditorialEditor(props: {
             </Button>
             {ready ? (
               <Button asChild variant="default" className="md:h-8 md:px-3">
-                <Link href={`/w/${props.slug}/campaigns/new?media=${renderedMediaId}`}>Agendar</Link>
+                <Link href={`/w/${props.slug}/create/quick?media=${renderedMediaId}`}>Agendar</Link>
               </Button>
             ) : (
               <Button type="button" variant="secondary" className="md:h-8 md:px-3" disabled title="Disponível quando o arquivo final estiver pronto e sem alterações pendentes">

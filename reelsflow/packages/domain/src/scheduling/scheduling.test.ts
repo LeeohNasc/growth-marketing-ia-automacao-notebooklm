@@ -226,6 +226,15 @@ describe("precedência", () => {
     expect(long.text).toHaveLength(2200);
     expect(long.truncated).toBe(true);
   });
+  it("não repete no fim as hashtags que já estão no texto (compatível quando não há repetição)", () => {
+    // sem repetição: idêntico ao comportamento anterior
+    expect(composeCaption({ caption: "Olá #dica", hashtags: ["#a", "#b"] }).text).toBe("Olá #dica\n\n#a #b");
+    expect(composeCaption({ caption: "", hashtags: ["#a"] }).text).toBe("#a");
+    // repetição (caso real do V41): legenda com hashtags + as mesmas no campo de hashtags
+    const v41 = "Segunda-feira, 9h01. 💀☕🐱\n#memes #humor #segundafeira #trabalho #memesbrasil";
+    expect(composeCaption({ caption: v41, hashtags: ["#memes", "#Humor", "#segundafeira", "#trabalho", "#memesbrasil"] }).text).toBe(v41);
+    expect(composeCaption({ caption: v41, hashtags: ["#memes", "#gatos"] }).text).toBe(`${v41}\n\n#gatos`);
+  });
 });
 
 describe("máquina de estados", () => {

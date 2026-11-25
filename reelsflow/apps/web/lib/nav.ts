@@ -33,9 +33,10 @@ export const NAV_ITEMS: NavItem[] = [
     icon: SquarePen,
     description: "Vídeos, Card Editorial e novas campanhas.",
     sections: [
-      { path: "create", label: "Criar publicação" },
+      { path: "create/quick", label: "Publicação rápida" },
+      { path: "create", label: "Card Editorial" },
       { path: "library", label: "Biblioteca" },
-      { path: "campaigns/new", label: "Nova campanha" },
+      { path: "campaigns/new", label: "Campanha" },
     ],
   },
   {

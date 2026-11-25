@@ -20,7 +20,7 @@ async function login(ctx) { const p = await ctx.newPage(); const errs = []; p.on
     const items = (await nav.locator("nav a").allInnerTexts()).map((t) => t.split("\n")[0]);
     ok(JSON.stringify(items) === JSON.stringify(AREAS), `menu com 5 áreas: ${JSON.stringify(items)}`);
     // cada endereço antigo abre a tela de sempre, com a área certa destacada e a aba certa ativa
-    const OLD = [["overview", "Início", "Início", "Resumo"], ["notifications", "Início", "Avisos", "Avisos"], ["create", "Criar", "Criar publicação", "Criar publicação"], ["library", "Criar", "Biblioteca", "Biblioteca"], ["campaigns/new", "Criar", "Nova campanha", "Nova campanha"],
+    const OLD = [["overview", "Início", "Início", "Resumo"], ["notifications", "Início", "Avisos", "Avisos"], ["create/quick", "Criar", "Publicação rápida", "Publicação rápida"], ["create", "Criar", "Card Editorial", "Card Editorial"], ["library", "Criar", "Biblioteca", "Biblioteca"], ["campaigns/new", "Criar", "Nova campanha", "Campanha"],
       ["calendar", "Calendário", "Calendário", "Calendário"], ["queue", "Calendário", "Lista de publicações", "Lista"], ["history", "Calendário", "Publicadas", "Publicadas"], ["campaigns", "Calendário", "Campanhas", "Campanhas"],
       ["analytics", "Resultados", "Resultados", null], ["settings", "Configurações", "Configurações", "Geral"], ["accounts", "Configurações", "Contas", "Contas"], ["templates", "Configurações", "Padrões de publicação", "Padrões de publicação"], ["automations", "Configurações", "Automações", "Automações"], ["billing", "Configurações", "Assinatura", "Assinatura"]];
     for (const [path, area, h1, tab] of OLD) {
@@ -57,7 +57,7 @@ async function login(ctx) { const p = await ctx.newPage(); const errs = []; p.on
     ok(JSON.stringify(await hl(p)) === '["Calendário"]', "Ctrl+clique (nova aba) não muda o destaque da aba atual");
     // deslocamento de layout numa volta pelas 5 áreas
     await p.evaluate(() => (window.__cls = 0));
-    for (const [l, h] of [["Início", "Início"], ["Criar", "Criar publicação"], ["Calendário", "Calendário"], ["Resultados", "Resultados"], ["Configurações", "Configurações"]]) { await nav.getByRole("link", { name: l, exact: true }).click(); await p.locator("main h1", { hasText: h }).waitFor(); await p.waitForTimeout(400); }
+    for (const [l, h] of [["Início", "Início"], ["Criar", "Publicação rápida"], ["Calendário", "Calendário"], ["Resultados", "Resultados"], ["Configurações", "Configurações"]]) { await nav.getByRole("link", { name: l, exact: true }).click(); await p.locator("main h1", { hasText: h }).waitFor(); await p.waitForTimeout(400); }
     const cls = await p.evaluate(() => window.__cls); ok(cls < 0.1, `deslocamento de layout acumulado em 5 navegações: ${cls.toFixed(3)} (limite bom < 0,1)`);
     ok(errs.length === 0, `erros de console (desktop): ${errs.length} ${JSON.stringify(errs.slice(0, 3))}`); await ctx.close(); }
   { const ctx = await b.newContext({ ...devices["Pixel 7"] }); const { p, errs } = await login(ctx); await p.goto(`${SITE}/w/${B}/overview`); await p.locator("main h1", { hasText: "Início" }).waitFor();

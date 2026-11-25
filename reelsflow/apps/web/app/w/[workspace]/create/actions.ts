@@ -9,6 +9,8 @@ export async function createCardAction(formData: FormData) {
   const slug = String(formData.get("slug") ?? "");
   const { workspace, user, role } = await requireWorkspace(slug);
   if (!can(role, "editContent")) redirect(`/w/${slug}/create?e=forbidden`);
+  const rawMedia = String(formData.get("media") ?? "");
+  const media = /^[0-9a-f-]{36}$/.test(rawMedia) ? rawMedia : null;
   const supabase = await createClient();
   const { data: acc } = await supabase
     .from("social_accounts")
@@ -31,11 +33,13 @@ export async function createCardAction(formData: FormData) {
       social_account_id: acc?.id ?? null,
       style: DEFAULT_CARD_STYLE,
       template_version: EDITORIAL_TEMPLATE_VERSION,
+      // Vindo da Publicação rápida com um vídeo escolhido: já começa como Reels 9:16 de vídeo.
+      ...(media ? { format: "vertical" as const, media_kind: "video" as const } : {}),
     })
     .select("id")
     .single();
   if (error || !data) redirect(`/w/${slug}/create?e=create`);
-  redirect(`/w/${slug}/create/editorial/${data.id}`);
+  redirect(`/w/${slug}/create/editorial/${data.id}${media ? `?media=${media}` : ""}`);
 }
 
 export async function duplicateCardAction(formData: FormData) {

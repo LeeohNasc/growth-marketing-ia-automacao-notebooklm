@@ -17,6 +17,7 @@ export function CaptionField({
   hint,
   rows = 4,
   error,
+  onChange,
 }: {
   caption?: string | null;
   hashtags?: string[];
@@ -24,6 +25,8 @@ export function CaptionField({
   hint?: string;
   rows?: number;
   error?: string;
+  /** Avisa o texto e as hashtags extras a cada mudança (para prévias ao vivo). */
+  onChange?: (caption: string, extra: string) => void;
 }) {
   const [text, setText] = useState(caption ?? "");
   const [extra, setExtra] = useState((hashtags ?? []).join(" "));
@@ -40,7 +43,7 @@ export function CaptionField({
         rows={rows}
         maxLength={2200}
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => (setText(e.target.value), onChange?.(e.target.value, extra))}
         aria-describedby="caption-help"
         className="rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       />
@@ -61,7 +64,7 @@ export function CaptionField({
       <details className="text-sm" open={typed.length > 0}>
         <summary className="cursor-pointer text-xs text-muted-foreground">Hashtags extras (opcional)</summary>
         <div className="mt-2 grid gap-1.5">
-          <Input id="hashtags" name="hashtags" value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="#reels #dica" aria-label="Hashtags extras" />
+          <Input id="hashtags" name="hashtags" value={extra} onChange={(e) => (setExtra(e.target.value), onChange?.(text, e.target.value))} placeholder="#reels #dica" aria-label="Hashtags extras" />
           <p className="text-xs text-muted-foreground">
             Entram no fim da legenda. Separe por espaço ou vírgula (máximo de 30).
             {repeated > 0 && ` ${repeated === 1 ? "1 já está" : `${repeated} já estão`} no texto e não ${repeated === 1 ? "será repetida" : "serão repetidas"}.`}

@@ -103,7 +103,7 @@ test("editor de imagem: preencher, três formatos, salvar, renderizar e enviar o
   expect([s.codec_name, s.width, s.height]).toEqual(["mjpeg", 1080, 1350]);
 
   const agendar = page.getByRole("link", { name: "Agendar" });
-  await expect(agendar).toHaveAttribute("href", `/w/leeoh/campaigns/new?media=${f.card.rendered_media_id}`);
+  await expect(agendar).toHaveAttribute("href", `/w/leeoh/create/quick?media=${f.card.rendered_media_id}`);
   await page.screenshot({ path: path.join(OUT, "editor-ready.png"), fullPage: true });
 
   // editar depois do render: volta a exigir nova renderização e bloqueia "Agendar"

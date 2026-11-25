@@ -79,7 +79,7 @@ export default async function OverviewPage({ params }: { params: Promise<{ works
           {workspace.queue_paused && <Badge variant="warning">Fila pausada</Badge>}
           {can(role, "editContent") && (
             <Button asChild>
-              <Link href={`/w/${slug}/create`}>
+              <Link href={`/w/${slug}/create/quick`}>
                 <SquarePen /> Criar publicação
               </Link>
             </Button>

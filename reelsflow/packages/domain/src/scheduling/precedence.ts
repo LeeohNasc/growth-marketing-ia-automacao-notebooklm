@@ -1,3 +1,5 @@
+import { extraHashtags } from "../media";
+
 /**
  * Precedência explícita de configuração:
  * vídeo > campanha > conta > global (workspace).
@@ -28,9 +30,13 @@ export function resolveContent(layers: Partial<Record<Layer, ContentConfig | nul
   };
 }
 
-/** Texto final publicado: legenda + hashtags, respeitando limite de caracteres. */
+/**
+ * Texto final publicado: legenda + hashtags, respeitando limite de caracteres.
+ * Hashtags que já aparecem no texto da legenda não são repetidas no fim (sem diferenciar maiúsculas).
+ * Sem repetição, o resultado é idêntico ao de antes (compatível com campanhas antigas).
+ */
 export function composeCaption(content: { caption: string; hashtags: string[] }, maxLength = 2200): { text: string; truncated: boolean } {
-  const tags = content.hashtags.join(" ");
+  const tags = extraHashtags(content.caption, content.hashtags).join(" ");
   const full = [content.caption.trim(), tags].filter(Boolean).join("\n\n");
   if (full.length <= maxLength) return { text: full, truncated: false };
   return { text: full.slice(0, maxLength), truncated: true };

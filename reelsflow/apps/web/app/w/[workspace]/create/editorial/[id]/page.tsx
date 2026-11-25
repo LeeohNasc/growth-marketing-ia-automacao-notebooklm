@@ -8,8 +8,9 @@ import { EditorialEditor } from "./editor";
 
 export const metadata: Metadata = { title: "Card Editorial" };
 
-export default async function EditorialCardPage({ params }: { params: Promise<{ workspace: string; id: string }> }) {
+export default async function EditorialCardPage({ params, searchParams }: { params: Promise<{ workspace: string; id: string }>; searchParams: Promise<{ media?: string }> }) {
   const { workspace: slug, id } = await params;
+  const { media: initialLibraryVideoId } = await searchParams;
   if (!/^[0-9a-f-]{36}$/.test(id)) notFound();
   const { workspace, role } = await requireWorkspace(slug);
   const supabase = await createClient();
@@ -59,7 +60,7 @@ export default async function EditorialCardPage({ params }: { params: Promise<{ 
       <div className="flex shrink-0 flex-wrap items-end justify-between gap-2">
         <div>
           <Link href={`/w/${slug}/create`} className="text-sm text-muted-foreground hover:underline">
-            ← Criar publicação
+            ← Card Editorial
           </Link>
           <h1 className="text-2xl font-semibold tracking-tight">Card Editorial</h1>
           <p className="text-sm text-muted-foreground max-md:hidden">A prévia é desenhada pelo mesmo código que gera o arquivo final.</p>
@@ -81,6 +82,7 @@ export default async function EditorialCardPage({ params }: { params: Promise<{ 
         }))}
         renderedUrl={renderedUrl}
         libraryVideos={libraryVideos ?? []}
+        initialLibraryVideoId={initialLibraryVideoId}
       />
       </div>
     </div>

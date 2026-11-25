@@ -11,7 +11,7 @@ import { requireWorkspace } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { createCardAction } from "./actions";
 
-export const metadata: Metadata = { title: "Criar publicação" };
+export const metadata: Metadata = { title: "Card Editorial" };
 
 const STATUS: Record<CardRenderStatus, { label: string; variant: "secondary" | "warning" | "success" | "outline" }> = {
   draft: { label: "Rascunho", variant: "secondary" },
@@ -44,7 +44,7 @@ export default async function CreatePage({ params, searchParams }: { params: Pro
   return (
     <div className="mx-auto grid max-w-5xl gap-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Criar publicação</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Card Editorial</h1>
         <p className="text-sm text-muted-foreground">Monte conteúdos no próprio ReelsFlow. O arquivo final vai para a Biblioteca e pode ser agendado como qualquer mídia.</p>
       </div>
       {sp.e && ERRORS[sp.e] && <Alert variant="destructive">{ERRORS[sp.e]}</Alert>}
