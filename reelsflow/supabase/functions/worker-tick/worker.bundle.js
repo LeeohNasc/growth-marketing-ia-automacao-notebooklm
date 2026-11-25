@@ -1425,6 +1425,28 @@ function evaluateCompatibility(probe, originalExt, sizeBytes) {
 function thumbnailPathFor(storagePath) {
   return storagePath.replace(/\/[^/]+$/, "/thumb.jpg");
 }
+function normalizeHashtags(input) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const raw of input.split(/[\s,;]+/)) {
+    const tag = raw.replace(/^#+/, "").replace(/[^\p{L}\p{N}_]/gu, "");
+    if (!tag) continue;
+    const norm = `#${tag.slice(0, 100)}`;
+    const key = norm.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(norm);
+    if (out.length === 30) break;
+  }
+  return out;
+}
+function hashtagsInText(text) {
+  return normalizeHashtags((text.match(/#[\p{L}\p{N}_]+/gu) ?? []).join(" "));
+}
+function extraHashtags(caption, tags) {
+  const inText = new Set(hashtagsInText(caption).map((t) => t.toLowerCase()));
+  return tags.filter((t) => !inText.has(t.toLowerCase()));
+}
 
 // ../../packages/domain/src/scheduling/schedule.ts
 import { Temporal } from "npm:temporal-polyfill@1.0.8";
@@ -1490,7 +1512,7 @@ function resolveContent(layers) {
   };
 }
 function composeCaption(content, maxLength = 2200) {
-  const tags = content.hashtags.join(" ");
+  const tags = extraHashtags(content.caption, content.hashtags).join(" ");
   const full = [content.caption.trim(), tags].filter(Boolean).join("\n\n");
   if (full.length <= maxLength) return { text: full, truncated: false };
   return { text: full.slice(0, maxLength), truncated: true };
