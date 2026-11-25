@@ -257,6 +257,69 @@ describe("agendamento", () => {
       expect((await pool.query("select status, attempt_count from public.publication_jobs where id = $1", [id])).rows[0]).toEqual({ status: "scheduled", attempt_count: 0 });
     });
 
+    describe("reagendamento com horário vencido (trava só para 'scheduled')", () => {
+      const jobOf = async (c: Ctx) => (await pool.query("select id from public.publication_jobs where campaign_id = $1", [c.campaign])).rows[0].id as string;
+      const backdate = (id: string, sql: string) => pool.query(`update public.publication_jobs set scheduled_at = ${sql}, next_attempt_at = ${sql} where id = $1`, [id]);
+      const errorOf = async (q: Promise<unknown>) => { try { await q; return "aceito"; } catch (e) { return `${(e as { code?: string }).code}:${(e as Error).message}`; } };
+      const count = async (c: Ctx) => Number((await pool.query("select count(*) from public.publication_jobs where campaign_id = $1", [c.campaign])).rows[0].count);
+
+      it("rascunho vencido (campanha em rascunho) pode ser reagendado: mesma publicação, continua rascunho", async () => {
+        const c = await seedCampaign(owner, ws, 1);
+        await savePlan(editor, c, [planJob(c, 0, inHours(24))]);
+        const id = await jobOf(c);
+        await backdate(id, "now() - interval '10 minutes'");
+        await asUser(editor, (db) => db.query("select public.reschedule_job($1, $2)", [id, inHours(1)]), { commit: true });
+        const r = (await pool.query("select id, status, pinned, scheduled_at > now() as futuro from public.publication_jobs where campaign_id = $1", [c.campaign])).rows;
+        expect(r).toEqual([{ id, status: "draft", pinned: true, futuro: true }]);
+      });
+
+      it("rascunho vencido não aceita novo horário passado nem a menos de 2 min", async () => {
+        const c = await seedCampaign(owner, ws, 1);
+        await savePlan(editor, c, [planJob(c, 0, inHours(24))]);
+        const id = await jobOf(c);
+        await backdate(id, "now() - interval '10 minutes'");
+        await expectPgError(asUser(editor, (db) => db.query("select public.reschedule_job($1, now() - interval '1 minute')", [id])), ["22023"]);
+        await expectPgError(asUser(editor, (db) => db.query("select public.reschedule_job($1, now() + interval '1 minute')", [id])), ["22023"]);
+        expect(await count(c)).toBe(1);
+      });
+
+      it("revisão vencida (ativada depois do horário) pode ser reagendada e volta a 'scheduled'", async () => {
+        const c = await seedCampaign(owner, ws, 1);
+        await savePlan(editor, c, [planJob(c, 0, inHours(24))]);
+        const id = await jobOf(c);
+        await backdate(id, "now() - interval '10 minutes'");
+        await asUser(editor, (db) => db.query("select public.set_campaign_status($1, 'activate')", [c.campaign]), { commit: true });
+        expect((await pool.query("select status, review_reason from public.publication_jobs where id = $1", [id])).rows[0]).toEqual({ status: "needs_review", review_reason: "scheduled_time_passed_before_activation" });
+        await asUser(editor, (db) => db.query("select public.reschedule_job($1, $2)", [id, inHours(1)]), { commit: true });
+        expect((await pool.query("select status, review_reason from public.publication_jobs where id = $1", [id])).rows[0]).toEqual({ status: "scheduled", review_reason: null });
+        expect(await count(c)).toBe(1);
+      });
+
+      it("agendada dentro da janela de 2 min ou vencida continua bloqueada (o worker pode pegá-la)", async () => {
+        const c = await seedCampaign(owner, ws, 1);
+        await savePlan(editor, c, [planJob(c, 0, inHours(24))]);
+        const id = await jobOf(c);
+        await asUser(editor, (db) => db.query("select public.set_campaign_status($1, 'activate')", [c.campaign]), { commit: true });
+        await backdate(id, "now() + interval '1 minute'");
+        expect(await errorOf(asUser(editor, (db) => db.query("select public.reschedule_job($1, $2)", [id, inHours(3)])))).toMatch(/^P0001:.*too close/);
+        await backdate(id, "now() - interval '5 minutes'");
+        expect(await errorOf(asUser(editor, (db) => db.query("select public.reschedule_job($1, $2)", [id, inHours(3)])))).toMatch(/^P0001:.*too close/);
+        expect((await pool.query("select status from public.publication_jobs where id = $1", [id])).rows[0].status).toBe("scheduled");
+      });
+
+      it("publicada continua sem reagendamento", async () => {
+        const c = await seedCampaign(owner, ws, 1);
+        await savePlan(editor, c, [planJob(c, 0, inHours(24))]);
+        const id = await jobOf(c);
+        for (const s of ["scheduled", "queued", "preparing", "uploading", "publishing", "published"]) await pool.query("update public.publication_jobs set status = $2 where id = $1", [id, s]);
+        await expectPgError(asUser(editor, (db) => db.query("select public.reschedule_job($1, $2)", [id, inHours(3)])), ["P0001"]);
+      });
+
+      it("a antecedência mínima do banco é a mesma da interface (2 min)", async () => {
+        expect((await pool.query("select extract(epoch from app.edit_freeze())::int as s")).rows[0].s).toBe(120);
+      });
+    });
+
     it("não membro não cancela, reagenda nem vê publicações", async () => {
       const c = await seedCampaign(owner, ws, 1);
       await savePlan(editor, c, [planJob(c, 0, inHours(24))]);

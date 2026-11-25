@@ -13,7 +13,7 @@ const revalidate = (slug: string) => {
 };
 
 const RPC_ERRORS: [string, string][] = [
-  ["too close", "Faltam menos de 2 minutos para esta publicação; ela não pode mais ser alterada."],
+  ["too close", "Esta publicação agendada está no horário de saída (ou ele já passou) e não pode mais ser alterada."],
   ["cannot be rescheduled", "Esta publicação está em andamento ou já foi concluída."],
   ["must be in the future", "Escolha um horário no futuro."],
 ];
