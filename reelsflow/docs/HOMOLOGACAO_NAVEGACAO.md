@@ -55,3 +55,13 @@ Medição local (18 ms/consulta, mesmos dados, mesma máquina), clique → conte
 | Criar publicação | 123 | 74 | | 172 | 172 |
 | Visão Geral | 213 | 154 | | 203 | 191 |
 Resposta visual ao clique: produção 123–253 → ajustado 2–4 ms.
+
+## Liberação em produção — 24–25/11/2026 (UTC)
+| Hora | Passo | Resultado |
+|---|---|---|
+| 23:44–23:47 | sessão de teste do usuário na prévia `dpl_7Fe8VB5…` (sem chave administrativa) | 1 login, 8 páginas (código novo), 0 falhas de autenticação, 0 respostas 4xx/5xx, tudo via São Paulo, mediana 26 ms/consulta |
+| 23:54 | deploy de produção sem domínio `dpl_4nTYcbbTmuvoAkiA6ZHMEtLYbGnB` (gru1, `12d1009`, worktree limpo) | 318 arquivos idênticos aos da prévia testada; verificação somente leitura sem falhas |
+| 23:55:52 | promoção via API | domínio em 4 s |
+| 23:56–00:11 | acompanhamento de 15 min | 0 erros 5xx (Vercel e Supabase); 0 falhas de getUser/login; 9 páginas servidas pelo código novo, 0 pelo antigo; 0 escritas pela API REST; worker e agendador 22 execuções, 0 falhas; 0 alertas; Zernio saudável; dados idênticos à referência de 23:57 e registros anteriores a 24/11 04:05 idênticos à referência original |
+
+Rollback: promover `dpl_W8BHG55Hd9ymhZ1diZ7MjFy43Qjb` (gru1, `0356e74`).
