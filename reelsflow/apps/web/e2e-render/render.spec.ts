@@ -20,6 +20,7 @@ type RF = {
   layout(c: unknown): Promise<CardLayout>;
   image(c: unknown, t?: string): Promise<{ data?: string; error?: string; message?: string }>;
   video(c: unknown, src: string): Promise<{ data?: string; error?: string; message?: string; durationS?: number; hasAudio?: boolean }>;
+  previewPng(c: unknown, showSafeArea: boolean): Promise<{ data: string }>;
   previewVsExport(c: unknown): Promise<{ width: number; height: number; exportW: number; exportH: number; maxDiff: number; differing: number }>;
   stats(d: string, t: string, r: Rect): Promise<{ w: number; h: number; nonWhite: number; dark: number; colored: number }>;
   diff(a: string, at: string, b: string, bt: string, r: Rect): Promise<number>;
@@ -194,5 +195,46 @@ test.describe("vídeo MP4", () => {
   test("imagem corrompida: erro claro", async ({ page }) => {
     const r = await rf(page, "image", { content: content(), media: [`${FX}/corrupt.mp4`] });
     expect(r.error).toBe("image_decode");
+  });
+});
+
+test.describe("vertical v2 — área segura dos Reels", () => {
+  const v2 = (over: Partial<CardContent> = {}) =>
+    content({ format: "vertical", mediaKind: "video", pageName: "🍿 Pipocou | Humor e Memes", headline: "EU NA REUNIÃO DE SEGUNDA:", templateVersion: 2, ...over });
+  const style = { watermark: { kind: "username", position: "bottom-right", opacity: 0.9 }, badge: { enabled: true } };
+
+  test("prévia == arquivo final (com selo e marca-d'água) e a simulação do Instagram NÃO vai para o arquivo", async ({ page }) => {
+    const cfg = { content: v2({ mediaKind: "image" }), avatar: `${FX}/avatar.png`, media: [`${FX}/photo1.jpg`], style };
+    const cmp = await rf(page, "previewVsExport", cfg);
+    expect(cmp.maxDiff).toBe(0);
+    const exp = await rf(page, "image", cfg);
+    const plain = await rf(page, "previewPng", cfg, false);
+    const overlay = await rf(page, "previewPng", cfg, true);
+    save("v2-preview-overlay.png", overlay.data);
+    const full = { x: 0, y: 0, w: 1080, h: 1920 };
+    expect(await rf(page, "diff", plain.data, "image/png", exp.data!, "image/png", full)).toBe(0);
+    expect(await rf(page, "diff", overlay.data, "image/png", exp.data!, "image/png", full)).toBeGreaterThan(0);
+  });
+
+  test("vídeo 9:16: avatar, nome, selo, @ e marca-d'água dentro da área segura e visíveis no MP4", async ({ page }) => {
+    const cfg = { content: v2(), avatar: `${FX}/avatar.png`, style };
+    const r = await rf(page, "video", cfg, `${FX}/vertical-noaudio.mp4`);
+    expect(r.error, r.message).toBeUndefined();
+    const f = save("v2-reels.mp4", r.data!);
+    const v = ffprobe(f).streams.find((s: { codec_type: string }) => s.codec_type === "video");
+    expect([v.width, v.height]).toEqual([1080, 1920]);
+    const frame = path.join(OUT, "v2-reels-frame.png");
+    execFileSync("ffmpeg", ["-y", "-v", "error", "-ss", "0.5", "-i", f, "-frames:v", "1", frame]);
+    const png = readFileSync(frame).toString("base64");
+    const l = await rf(page, "layout", cfg);
+    const S = { x0: 120, y0: 250, x1: 960, y1: 1520 };
+    const within = (r: Rect) => r.x >= S.x0 && r.x + r.w <= S.x1 && r.y >= S.y0 && r.y + r.h <= S.y1;
+    expect(within(l.avatar)).toBe(true);
+    expect(within(l.badge!)).toBe(true);
+    for (const r of [l.avatar, l.badge!]) expect((await rf(page, "stats", png, "image/png", inner(r, 4))).nonWhite).toBeGreaterThan(0.3);
+    const w = l.watermarkAnchor!;
+    expect(w.x).toBeLessThanOrEqual(1080 - 220);
+    expect(w.y + w.size).toBeLessThanOrEqual(1920 - 400);
+    expect((await rf(page, "stats", png, "image/png", { x: w.x - 300, y: w.y - w.size / 2, w: 300, h: w.size })).nonWhite).toBeGreaterThan(0.01);
   });
 });

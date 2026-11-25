@@ -1,6 +1,6 @@
 "use server";
 import { redirect } from "next/navigation";
-import { DEFAULT_CARD_STYLE, can } from "@reelsflow/domain";
+import { DEFAULT_CARD_STYLE, EDITORIAL_TEMPLATE_VERSION, can } from "@reelsflow/domain";
 import { requireWorkspace } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 
@@ -30,6 +30,7 @@ export async function createCardAction(formData: FormData) {
       username: /^[\p{L}\p{N}._]{1,30}$/u.test(username) ? username : "",
       social_account_id: acc?.id ?? null,
       style: DEFAULT_CARD_STYLE,
+      template_version: EDITORIAL_TEMPLATE_VERSION,
     })
     .select("id")
     .single();

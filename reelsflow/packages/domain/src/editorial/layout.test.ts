@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CARD_FORMATS,
+  REELS_SAFE_AREA,
   computeCardLayout,
   cardPublishRestrictions,
   ellipsize,
@@ -179,5 +180,74 @@ describe("agendamento de imagem por tipo de conta", () => {
     expect(isCompatible(imageItem, "instagram", "native")).toBe(false);
     expect(isCompatible(imageItem, "instagram")).toBe(false);
     expect(isCompatible(imageItem, "mock")).toBe(true);
+  });
+});
+
+describe("vertical v2 — área segura dos Reels", () => {
+  const v = (over: Partial<CardContent> = {}): CardContent => ({ ...base, format: "vertical", pageName: "🍿 Pipocou | Humor e Memes", mediaKind: "video", ...over });
+  const S = REELS_SAFE_AREA;
+  const inside = (x: number, y: number, w: number, h: number) => {
+    expect(x).toBeGreaterThanOrEqual(S.side);
+    expect(x + w).toBeLessThanOrEqual(1080 - S.side);
+    expect(y).toBeGreaterThanOrEqual(S.top);
+    expect(y + h).toBeLessThanOrEqual(1920 - S.bottom);
+  };
+
+  it("avatar, nome, @ e manchete ficam dentro de 120/250/400", () => {
+    const l = computeCardLayout(v({ templateVersion: 2 }), {}, measure);
+    expect(l.safeArea).toEqual({ x: 120, y: 250, w: 840, h: 1270 });
+    inside(l.avatar.x, l.avatar.y, l.avatar.w, l.avatar.h);
+    for (const r of [l.name, l.username, ...l.headline.lines]) {
+      const size = Number(/(\d+)px/.exec(r.font)![1]);
+      inside(r.x, r.y - size, measure(r.text, r.font), size);
+    }
+  });
+
+  it("marca-d'água acima da área inferior e longe da coluna de botões (nos dois lados)", () => {
+    for (const position of ["bottom-right", "bottom-left"] as const) {
+      const l = computeCardLayout(v({ templateVersion: 2 }), { watermark: { kind: "username", position, opacity: 0.9 } }, measure);
+      const wm = l.watermarkAnchor!;
+      expect(wm.y + wm.size).toBeLessThanOrEqual(1920 - S.bottom);
+      expect(wm.y).toBeGreaterThan(l.media.y + l.media.h); // na faixa branca, não sobre o vídeo
+      const left = wm.align === "right" ? wm.x - wm.maxWidth : wm.x;
+      const right = wm.align === "right" ? wm.x : wm.x + wm.maxWidth;
+      expect(left).toBeGreaterThanOrEqual(S.side);
+      expect(right).toBeLessThanOrEqual(1080 - S.rightRail);
+    }
+  });
+
+  it("vídeo continua ocupando a largura toda e com altura útil", () => {
+    const l = computeCardLayout(v({ templateVersion: 2 }), { watermark: { kind: "username", position: "bottom-right", opacity: 0.9 } }, measure);
+    expect(l.media.x).toBe(0);
+    expect(l.media.w).toBe(1080);
+    expect(l.media.h).toBeGreaterThan(900);
+    expect(l.blocking).toEqual([]);
+  });
+
+  it("selo na mesma linha do nome, 6–8 px depois dele, centralizado e dentro da área segura", () => {
+    const l = computeCardLayout(v({ templateVersion: 2 }), { badge: { enabled: true } }, measure);
+    const b = l.badge!;
+    const gap = b.x - (l.name.x + measure(l.name.text, l.name.font));
+    expect(gap).toBeGreaterThanOrEqual(6);
+    expect(gap).toBeLessThanOrEqual(8);
+    const capMid = l.name.y - 40 * 0.36;
+    expect(Math.abs(b.y + b.h / 2 - capMid)).toBeLessThan(1);
+    inside(b.x, b.y, b.w, b.h);
+    // @ não encosta no selo
+    if (l.username.y === l.name.y) expect(l.username.x).toBeGreaterThan(b.x + b.w);
+  });
+
+  it("v1 (cards já existentes) não muda: sem versão = desenho antigo", () => {
+    const a = computeCardLayout(v(), {}, measure);
+    const b = computeCardLayout(v({ templateVersion: 1 }), {}, measure);
+    expect(a).toEqual(b);
+    expect(a.avatar.x).toBe(48);
+    expect(a.badge).toBeNull();
+  });
+
+  it("v2 não altera feed nem quadrado", () => {
+    for (const format of ["feed", "square"] as const) {
+      expect(computeCardLayout({ ...base, format, templateVersion: 2 }, {}, measure)).toEqual(computeCardLayout({ ...base, format }, {}, measure));
+    }
   });
 });

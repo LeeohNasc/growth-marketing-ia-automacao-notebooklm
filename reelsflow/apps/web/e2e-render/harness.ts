@@ -82,6 +82,14 @@ const api = {
     }
     return { width: canvas.width, height: canvas.height, exportW: exp.w, exportH: exp.h, maxDiff: max, differing, bbox: differing ? { x0, y0, x1, y1 } : null };
   },
+  /** PNG da prévia do editor, com ou sem a simulação da área segura (para comparar com o arquivo final). */
+  async previewPng(cfg: Cfg, showSafeArea: boolean) {
+    const input = await toInput(cfg);
+    await ensureCardFonts();
+    const canvas = document.createElement("canvas");
+    renderPreview(canvas, input, { showSafeArea });
+    return { data: await b64(await new Promise<Blob>((res) => canvas.toBlob((b) => res(b!), "image/png"))) };
+  },
   /** Estatísticas de uma região: fração não-branca, fração escura (texto) e fração colorida (foto/emoji). */
   async stats(data: string, type: string, r: Rect) {
     const p = await pixels(data, type);

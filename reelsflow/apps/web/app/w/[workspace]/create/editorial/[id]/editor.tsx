@@ -96,7 +96,7 @@ export function EditorialEditor(props: {
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [dirty, setDirty] = useState(false);
   const [layout, setLayout] = useState<CardLayout | null>(null);
-  const [showSafe, setShowSafe] = useState(format === "vertical");
+  const [showSafe, setShowSafe] = useState(false);
   const [lastRender, setLastRender] = useState<{ blob: Blob; name: string } | null>(null);
   const [loadingSources, setLoadingSources] = useState(true);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -142,8 +142,8 @@ export function EditorialEditor(props: {
   useEffect(() => () => void (videoUrl && URL.revokeObjectURL(videoUrl)), [videoUrl]);
 
   const content: CardContent = useMemo(
-    () => ({ format, pageName, username: normalizeUsername(username), headline, mediaKind, fit }),
-    [format, pageName, username, headline, mediaKind, fit],
+    () => ({ format, pageName, username: normalizeUsername(username), headline, mediaKind, fit, templateVersion: c.template_version }),
+    [format, pageName, username, headline, mediaKind, fit, c.template_version],
   );
 
   const renderInput = useCallback(
@@ -534,6 +534,13 @@ export function EditorialEditor(props: {
             <Label htmlFor="ec-pad">Respiro inferior: {style.bottomPadding}px</Label>
             <input id="ec-pad" type="range" min={0} max={240} step={4} value={style.bottomPadding} onChange={(e) => (setStyle({ ...style, bottomPadding: Number(e.target.value) }), touch())} disabled={!props.canEdit} />
           </div>
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" className="mt-1" checked={Boolean(style.badge?.enabled)} onChange={(e) => (setStyle({ ...style, badge: { enabled: e.target.checked } }), touch())} disabled={!props.canEdit} />
+            <span>
+              Selo ao lado do nome
+              <span className="block text-xs text-muted-foreground">Selo próprio da sua identidade visual (estrela). Não é o selo de verificação do Instagram.</span>
+            </span>
+          </label>
           <div className="grid gap-1.5">
             <Label htmlFor="ec-wm">Marca-d’água (sua)</Label>
             <NativeSelect id="ec-wm" value={style.watermark.kind} onChange={(e) => (setStyle({ ...style, watermark: { ...style.watermark, kind: e.target.value as Style["watermark"]["kind"] } }), touch())} disabled={!props.canEdit}>
@@ -587,7 +594,7 @@ export function EditorialEditor(props: {
           </div>
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              <input type="checkbox" checked={showSafe} onChange={(e) => setShowSafe(e.target.checked)} /> Área segura
+              <input type="checkbox" checked={showSafe} onChange={(e) => setShowSafe(e.target.checked)} /> Visualizar área segura
             </label>
             <span className="flex gap-1 md:hidden">
               {previewMode !== "collapsed" && (

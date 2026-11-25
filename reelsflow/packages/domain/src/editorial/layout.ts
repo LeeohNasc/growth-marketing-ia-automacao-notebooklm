@@ -17,7 +17,15 @@
 
 export const EDITORIAL_TEMPLATE_TYPE = "editorial_card" as const;
 /** Mudanças que alteram o desenho incrementam a versão (rascunhos antigos continuam renderizando igual). */
-export const EDITORIAL_TEMPLATE_VERSION = 1;
+export const EDITORIAL_TEMPLATE_VERSION = 2;
+
+/**
+ * Área segura dos Reels na versão 2 (canvas 1080×1920, medidas na largura 1080). Referências INICIAIS de
+ * projeto, não medidas oficiais: o Instagram amplia o 9:16 para preencher telas mais altas (corta ~96 px de
+ * cada lateral num iPhone), sobrepõe abas no topo, a coluna de botões à direita e perfil/legenda/barra na base.
+ * `rightRail`: distância mínima da borda direita para o que fica na metade inferior (coluna de botões).
+ */
+export const REELS_SAFE_AREA = { side: 120, top: 250, bottom: 400, rightRail: 220 } as const;
 
 export const CARD_FORMATS = {
   feed: { width: 1080, height: 1350, label: "Feed 4:5 (1080×1350)" },
@@ -44,6 +52,8 @@ export type CardStyle = {
   watermark: { kind: "none" | "username" | "logo"; position: "bottom-right" | "bottom-left"; opacity: number };
   /** Guias de área segura na PRÉVIA (nunca no arquivo final). */
   showSafeArea?: boolean;
+  /** Selo de identidade visual ao lado do nome (próprio do ReelsFlow; NÃO imita o selo oficial de verificação). */
+  badge?: { enabled: boolean };
 };
 
 export const DEFAULT_CARD_STYLE: CardStyle = {
@@ -71,6 +81,8 @@ export type CardContent = {
   headline: string;
   mediaKind: CardMediaKind;
   fit: CardFit;
+  /** Versão do desenho gravada no card (ausente = 1). A 2 muda só o formato vertical (área segura dos Reels). */
+  templateVersion?: number;
 };
 
 /** Medidor de texto injetado (no navegador: CanvasRenderingContext2D.measureText). */
@@ -92,6 +104,8 @@ export type CardLayout = {
   /** Uma área para imagem/vídeo; duas para "Duas imagens lado a lado". */
   slots: Rect[];
   divider: Rect | null;
+  /** Selo ao lado do nome (círculo), quando ligado. */
+  badge: Rect | null;
   watermarkAnchor: { x: number; y: number; align: "left" | "right"; size: number; maxWidth: number } | null;
   safeArea: Rect;
   /** Problemas que IMPEDEM exportar (nunca truncar em silêncio). */
@@ -117,6 +131,9 @@ const M = {
   headerBottomGap: 32,
   dividerWidth: 6,
   watermarkSize: 28,
+  /** Selo: diâmetro relativo ao corpo do nome e espaço até o nome (6–8 px na largura 1080). */
+  badgeRatio: 0.8,
+  badgeGap: 7,
   minMediaRatio: 0.35,
 } as const;
 
@@ -210,17 +227,28 @@ export function computeCardLayout(content: CardContent, styleIn: Partial<CardSty
   const warnings: CardIssue[] = [];
 
   const isVertical = content.format === "vertical";
-  const safeArea: Rect = isVertical
-    ? { x: M.padX * u, y: height * VERTICAL_SAFE.top, w: width - 2 * M.padX * u, h: height * (1 - VERTICAL_SAFE.top - VERTICAL_SAFE.bottom) }
-    : { x: M.padX * u, y: M.padTop * u, w: width - 2 * M.padX * u, h: height - 2 * M.padTop * u };
+  // Versão 2 no vertical: tudo que identifica o perfil fica dentro da área segura dos Reels.
+  const reels = isVertical && (content.templateVersion ?? 1) >= 2;
+  const R = { side: REELS_SAFE_AREA.side * u, top: REELS_SAFE_AREA.top * u, bottom: REELS_SAFE_AREA.bottom * u, rail: REELS_SAFE_AREA.rightRail * u };
+  const padX = reels ? R.side : M.padX * u;
+  const hasWatermark = style.watermark.kind !== "none";
+  const wmSize = M.watermarkSize * u;
+  const wmBand = reels && hasWatermark ? Math.round(wmSize * 2.2) : 0;
+  const safeArea: Rect = reels
+    ? { x: R.side, y: R.top, w: width - 2 * R.side, h: height - R.top - R.bottom }
+    : isVertical
+      ? { x: M.padX * u, y: height * VERTICAL_SAFE.top, w: width - 2 * M.padX * u, h: height * (1 - VERTICAL_SAFE.top - VERTICAL_SAFE.bottom) }
+      : { x: M.padX * u, y: M.padTop * u, w: width - 2 * M.padX * u, h: height - 2 * M.padTop * u };
 
   const top = isVertical ? safeArea.y : M.padTop * u;
-  const bottomPadding = Math.max(clamp(style.bottomPadding, 0, 240) * u, isVertical ? height * VERTICAL_SAFE.bottom : 0);
+  const bottomPadding = reels
+    ? Math.max(clamp(style.bottomPadding, 0, 240) * u, R.bottom) + wmBand
+    : Math.max(clamp(style.bottomPadding, 0, 240) * u, isVertical ? height * VERTICAL_SAFE.bottom : 0);
 
   const avatarSize = M.avatar * u;
-  const avatar: Rect = { x: M.padX * u, y: top, w: avatarSize, h: avatarSize };
+  const avatar: Rect = { x: padX, y: top, w: avatarSize, h: avatarSize };
   const colX = avatar.x + avatarSize + M.avatarGap * u;
-  const colW = width - colX - M.padX * u;
+  const colW = width - colX - padX;
 
   const nameFont = `700 ${Math.round(M.nameSize * u)}px ${f}`;
   const userFont = `400 ${Math.round(M.usernameSize * u)}px ${f}`;
@@ -232,24 +260,35 @@ export function computeCardLayout(content: CardContent, styleIn: Partial<CardSty
   let name: TextRun;
   let username: TextRun;
   let afterHeaderY: number;
+  // Selo (opcional) logo depois do nome, na mesma linha: ocupa largura que o nome não pode usar.
+  const badgeOn = Boolean(style.badge?.enabled);
+  const badgeSize = badgeOn ? Math.round(M.nameSize * u * M.badgeRatio) : 0;
+  const badgeGap = badgeOn ? Math.round(M.badgeGap * u) : 0;
+  const badgeW = badgeSize + badgeGap;
   const nameW = measure(nameText, nameFont);
   const userW = measure(userText, userFont);
-  if (nameW + gap + userW <= colW) {
+  let nameDrawnW = nameW;
+  if (nameW + badgeW + gap + userW <= colW) {
     // Nome e @ lado a lado (padrão das referências).
     name = { text: nameText, x: colX, y: nameBase, font: nameFont, color: CLASSIC_COLORS.name, maxWidth: nameW };
-    username = { text: userText, x: colX + nameW + gap, y: nameBase, font: userFont, color: CLASSIC_COLORS.username, maxWidth: colW - nameW - gap };
+    username = { text: userText, x: colX + nameW + badgeW + gap, y: nameBase, font: userFont, color: CLASSIC_COLORS.username, maxWidth: colW - nameW - badgeW - gap };
     afterHeaderY = nameBase;
   } else {
     // Não cabem juntos: @ vai para a linha de baixo; ambos com reticências se preciso. Nunca sobre a manchete.
-    const nameFit = ellipsize(nameText, colW, nameFont, measure);
+    const nameFit = ellipsize(nameText, colW - badgeW, nameFont, measure);
+    nameDrawnW = measure(nameFit, nameFont);
     const userFit = ellipsize(userText, colW, userFont, measure);
     if (nameFit !== nameText) warnings.push({ code: "page_name_truncated", message: "O nome da página foi abreviado com reticências para caber." });
     if (userFit !== userText) warnings.push({ code: "username_truncated", message: "O @usuário foi abreviado com reticências para caber." });
-    name = { text: nameFit, x: colX, y: nameBase, font: nameFont, color: CLASSIC_COLORS.name, maxWidth: colW };
+    name = { text: nameFit, x: colX, y: nameBase, font: nameFont, color: CLASSIC_COLORS.name, maxWidth: colW - badgeW };
     const userBase = nameBase + M.usernameSize * u * 1.25;
     username = { text: userFit, x: colX, y: userBase, font: userFont, color: CLASSIC_COLORS.username, maxWidth: colW };
     afterHeaderY = userBase;
   }
+  // Centro vertical do selo = meio da altura das maiúsculas do nome (~0,72 do corpo).
+  const badge: Rect | null = badgeOn
+    ? { x: colX + nameDrawnW + badgeGap, y: nameBase - M.nameSize * u * 0.36 - badgeSize / 2, w: badgeSize, h: badgeSize }
+    : null;
 
   // Manchete: tamanho escolhido pelo usuário (redução EXPLÍCITA; nunca automática nem truncada).
   const scale = clamp(style.headlineScale, 0.7, 1);
@@ -287,7 +326,17 @@ export function computeCardLayout(content: CardContent, styleIn: Partial<CardSty
   }
 
   let watermarkAnchor: CardLayout["watermarkAnchor"] = null;
-  if (style.watermark.kind !== "none") {
+  if (reels && hasWatermark) {
+    // Faixa branca logo ACIMA da área inferior coberta (perfil, legenda, barra) e à esquerda da coluna de botões.
+    const right = style.watermark.position === "bottom-right";
+    watermarkAnchor = {
+      x: right ? width - R.rail : R.side,
+      y: height - R.bottom - wmBand / 2,
+      align: right ? "right" : "left",
+      size: wmSize,
+      maxWidth: width - R.rail - R.side,
+    };
+  } else if (style.watermark.kind !== "none") {
     const size = M.watermarkSize * u;
     const inPadding = bottomPadding >= size * 2;
     const y = inPadding ? mediaBottom + bottomPadding / 2 : mediaBottom - size;
@@ -307,6 +356,7 @@ export function computeCardLayout(content: CardContent, styleIn: Partial<CardSty
     media,
     slots,
     divider,
+    badge,
     watermarkAnchor,
     safeArea,
     blocking,

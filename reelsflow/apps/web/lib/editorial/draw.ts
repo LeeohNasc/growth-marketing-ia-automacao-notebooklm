@@ -111,14 +111,18 @@ export function drawCard(ctx: Ctx, input: CardDrawInput): void {
     ctx.fillText(run.text, run.x, run.y);
   }
 
+  if (l.badge) drawBadge(ctx, l.badge);
+
   // Marca-d'água do próprio usuário (opcional).
   const wm = l.watermarkAnchor;
   if (wm && input.watermark.kind !== "none") {
     ctx.save();
     ctx.globalAlpha = Math.min(1, Math.max(0.1, input.watermark.opacity));
     if (input.watermark.kind === "logo" && input.watermark.logo) {
-      const h = wm.size * 1.6;
-      const w = Math.min(wm.maxWidth, (input.watermark.logo.width / input.watermark.logo.height) * h);
+      // Proporção sempre preservada: se a logo for larga demais para o espaço, reduz altura e largura juntas.
+      const ratio = input.watermark.logo.width / input.watermark.logo.height;
+      const w = Math.min(wm.maxWidth, ratio * wm.size * 1.6);
+      const h = w / ratio;
       const x = wm.align === "right" ? wm.x - w : wm.x;
       input.watermark.logo.draw(ctx, 0, 0, input.watermark.logo.width, input.watermark.logo.height, x, wm.y - h / 2, w, h);
     } else if (input.watermark.text) {
@@ -132,6 +136,7 @@ export function drawCard(ctx: Ctx, input: CardDrawInput): void {
   }
 
   if (input.preview && input.showSafeArea) {
+    if (l.height > l.width) drawReelsOverlay(ctx, l);
     ctx.save();
     ctx.setLineDash([12 * l.u, 10 * l.u]);
     ctx.strokeStyle = CLASSIC_COLORS.safeArea;
@@ -140,5 +145,79 @@ export function drawCard(ctx: Ctx, input: CardDrawInput): void {
     ctx.strokeRect(s.x, s.y, s.w, s.h);
     ctx.restore();
   }
+  ctx.restore();
+}
+
+/**
+ * Selo de identidade visual (próprio): círculo âmbar com estrela branca de 5 pontas.
+ * Propositalmente diferente do selo oficial de verificação (azul com visto) para não se passar por ele.
+ */
+function drawBadge(ctx: Ctx, b: { x: number; y: number; w: number; h: number }): void {
+  const cx = b.x + b.w / 2, cy = b.y + b.h / 2, r = b.w / 2;
+  ctx.save();
+  ctx.fillStyle = "#F5A524";
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#FFFFFF";
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const rr = i % 2 === 0 ? r * 0.62 : r * 0.26;
+    const ang = -Math.PI / 2 + (i * Math.PI) / 5;
+    const px = cx + rr * Math.cos(ang), py = cy + rr * Math.sin(ang);
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+/**
+ * SIMULAÇÃO APROXIMADA da interface dos Reels sobre o card (só na prévia; nunca no arquivo final).
+ * Coordenadas no canvas 1080×1920, tiradas de um print de iPhone (tela mais alta que 9:16): faixas
+ * laterais cortadas, abas no topo, coluna de botões à direita, perfil/legenda e barra de navegação na base.
+ */
+function drawReelsOverlay(ctx: Ctx, l: CardLayout): void {
+  const k = l.width / 1080;
+  const font = l.fontFamily;
+  ctx.save();
+  // Laterais que somem em telas altas.
+  ctx.fillStyle = "rgba(220, 38, 38, 0.18)";
+  ctx.fillRect(0, 0, 96 * k, l.height);
+  ctx.fillRect(l.width - 96 * k, 0, 96 * k, l.height);
+  // Topo (abas) e base (barra do app).
+  ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
+  ctx.fillRect(0, 0, l.width, 188 * k);
+  ctx.fillRect(0, 1737 * k, l.width, l.height - 1737 * k);
+  // Gradiente escuro atrás de perfil/legenda.
+  ctx.fillStyle = "rgba(0, 0, 0, 0.28)";
+  ctx.fillRect(0, 1540 * k, l.width, 197 * k);
+  ctx.fillStyle = "#FFFFFF";
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "center";
+  ctx.font = `600 ${Math.round(40 * k)}px ${font}`;
+  ctx.fillText("Reels      Amigos", l.width / 2, 120 * k);
+  // Coluna de botões (curtir, comentar, repostar, enviar, mais).
+  ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+  for (const y of [1162, 1262, 1369, 1469, 1569]) {
+    ctx.beginPath();
+    ctx.arc(917 * k, y * k, 35 * k, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Linha de perfil e legenda.
+  ctx.beginPath();
+  ctx.arc(167 * k, 1596 * k, 38 * k, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#FFFFFF";
+  ctx.textAlign = "left";
+  ctx.font = `600 ${Math.round(34 * k)}px ${font}`;
+  ctx.fillText("nome_do_perfil  •  Seguir", 227 * k, 1596 * k);
+  ctx.font = `400 ${Math.round(32 * k)}px ${font}`;
+  ctx.fillText("Legenda do post aparece aqui…", 129 * k, 1675 * k);
+  // Rótulo.
+  ctx.font = `600 ${Math.round(26 * k)}px ${font}`;
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillText("Simulação aproximada do Instagram — não sai no arquivo final", l.width / 2, 1830 * k);
   ctx.restore();
 }

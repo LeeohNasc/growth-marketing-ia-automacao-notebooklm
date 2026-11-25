@@ -184,7 +184,7 @@ export type Database = {
       };
       editorial_cards: {
         Row: EditorialCardRow;
-        Insert: Pick<EditorialCardRow, "workspace_id" | "created_by" | "title"> & EditorialCardUpdate;
+        Insert: Pick<EditorialCardRow, "workspace_id" | "created_by" | "title"> & EditorialCardUpdate & { template_version?: number };
         Update: EditorialCardUpdate;
         Relationships: [];
       };
