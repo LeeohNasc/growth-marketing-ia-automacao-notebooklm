@@ -162,6 +162,36 @@ test("editor de vídeo: prévia com controles, MP4 final H.264 yuv420p com áudi
   expect(Math.abs(Number(info.format.duration) - 4)).toBeLessThan(0.15);
 });
 
+test("vídeo da Biblioteca no card: sem reenviar do aparelho (cópia no armazenamento) e renderiza normalmente", async ({ page }) => {
+  await page.goto("/editor.html");
+  await page.waitForSelector("body[data-ready='1']", { state: "attached" });
+  const lib = [{ id: "33333333-3333-4333-8333-333333333333", name: "V41", storage_path: `${WS}/lib/vertical-noaudio.mp4`, duration_ms: 4000, size_bytes: 1000 }];
+  await page.evaluate(
+    ([c, a, ws, l]) => (window as unknown as { mountEditor: (p: unknown) => void }).mountEditor({ slug: "leeoh", workspaceId: ws, canEdit: true, card: c, sourceUrls: { avatar: null, media: [], logo: null }, accounts: a, renderedUrl: null, libraryVideos: l }),
+    [baseCard({ page_name: "Pipocou", username: "pipocoumemes", headline: "EU NA REUNIÃO DE SEGUNDA:", media_kind: "video", format: "vertical", template_version: 2 }), accounts, WS, lib] as const,
+  );
+  await expect(page.getByText(/Carregando arquivos salvos/)).toHaveCount(0, { timeout: 15_000 });
+  await page.getByLabel("Ou escolha um vídeo que já está na Biblioteca").selectOption(lib[0]!.id);
+  await expect(page.getByRole("button", { name: "Reproduzir" })).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Salvar rascunho" }).click();
+  await expect(page.getByText("Rascunho salvo.")).toBeVisible({ timeout: 15_000 });
+  let f = await fake(page);
+  const copy = f.calls.find((c) => c.op === "storage:copy");
+  expect(copy?.args.from).toBe(lib[0]!.storage_path);
+  expect(String(copy?.args.to)).toMatch(new RegExp(`^${WS}/cards/[0-9a-f-]{36}/video-[0-9a-f-]{12}\\.mp4$`));
+  // o vídeo NÃO foi reenviado do aparelho
+  expect(f.calls.filter((c) => c.op === "storage:upload" && String(c.args.path).includes("/cards/") && String(c.args.path).includes("/video-"))).toHaveLength(0);
+  expect((f.card.media_paths as string[])[0]).toBe(copy?.args.to);
+  await page.getByRole("button", { name: "Renderizar arquivo final" }).click();
+  await expect(page.getByText("Pronto para agendar")).toBeVisible({ timeout: 120_000 });
+  f = await fake(page);
+  const mp4 = f.paths.find((p) => p.endsWith("/original.mp4"))!;
+  const file = path.join(OUT, "editor-biblioteca-video.mp4");
+  writeFileSync(file, Buffer.from(await storedB64(page, mp4), "base64"));
+  const v = ffprobe(file).streams.find((s: { codec_type: string }) => s.codec_type === "video");
+  expect([v.codec_name, v.width, v.height]).toEqual(["h264", 1080, 1920]);
+});
+
 test("celular: prévia acima dos controles, sem rolagem horizontal", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await mount(page, baseCard({ page_name: "Pipocou", username: "pipocoumemes", headline: "🚨 VEJA | Manchete no celular" }));

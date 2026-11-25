@@ -89,6 +89,17 @@ const client = {
         state.storage.set(path, blob);
         return { data: { path }, error: null };
       },
+      // Biblioteca simulada: "lib/<arquivo>" aponta para /fixtures/<arquivo>.
+      async createSignedUrl(path: string) {
+        state.calls.push({ op: "storage:signed", args: { path } });
+        return { data: { signedUrl: `/fixtures/${path.split("/").pop()}` }, error: null };
+      },
+      async copy(from: string, to: string) {
+        state.calls.push({ op: "storage:copy", args: { from, to } });
+        const blob = await (await fetch(`/fixtures/${from.split("/").pop()}`)).blob();
+        state.storage.set(to, blob);
+        return { data: { path: to }, error: null };
+      },
     }),
   },
 };
